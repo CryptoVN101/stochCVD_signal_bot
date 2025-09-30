@@ -149,7 +149,7 @@ class DatabaseManager:
             symbols = self.session.query(WatchlistSymbol).filter_by(is_active=True).all()
             return [s.symbol for s in symbols]
         except Exception as e:
-            self.session.rollback()  # Thêm rollback
+            self.session.rollback()
             print(f"Lỗi khi lấy danh sách symbol: {str(e)}")
             return []
     
@@ -167,7 +167,7 @@ class DatabaseManager:
                 'added_at': s.added_at
             } for s in symbols]
         except Exception as e:
-            self.session.rollback()  # Thêm rollback
+            self.session.rollback()
             print(f"Lỗi khi lấy thông tin watchlist: {str(e)}")
             return []
     
@@ -188,7 +188,12 @@ class DatabaseManager:
             # Kiểm tra đã tồn tại chưa
             existing = self.session.query(SignalHistory).filter_by(signal_id=signal_id).first()
             if existing:
-                return False  # Đã tồn tại
+                print(f"⚠️ Signal {signal_id} đã tồn tại, bỏ qua")
+                return False
+            
+            # Format số để đảm bảo không quá 10 ký tự
+            stoch_m15_str = f"{float(stoch_m15):.2f}"
+            stoch_h1_str = f"{float(stoch_h1):.2f}"
             
             signal = SignalHistory(
                 signal_id=signal_id,
@@ -196,15 +201,18 @@ class DatabaseManager:
                 signal_type=signal_type,
                 signal_time=signal_time,
                 price=str(price),
-                stoch_m15=str(stoch_m15),
-                stoch_h1=str(stoch_h1)
+                stoch_m15=stoch_m15_str,
+                stoch_h1=stoch_h1_str
             )
             self.session.add(signal)
             self.session.commit()
+            print(f"✅ Đã lưu signal {signal_id} vào database")
             return True
         except Exception as e:
             self.session.rollback()
-            print(f"Lỗi khi lưu signal: {str(e)}")
+            print(f"❌ LỖI KHI LƯU SIGNAL {signal_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def check_signal_exists(self, signal_id):
@@ -221,7 +229,7 @@ class DatabaseManager:
             existing = self.session.query(SignalHistory).filter_by(signal_id=signal_id).first()
             return existing is not None
         except Exception as e:
-            self.session.rollback()  # Thêm rollback
+            self.session.rollback()
             print(f"Lỗi khi kiểm tra signal: {str(e)}")
             return False
     
