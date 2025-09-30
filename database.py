@@ -33,9 +33,9 @@ class SignalHistory(Base):
     __tablename__ = 'signal_history'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    signal_id = Column(String(50), unique=True, nullable=False)  # Unique ID
+    signal_id = Column(String(50), unique=True, nullable=False)
     symbol = Column(String(20), nullable=False)
-    signal_type = Column(String(10), nullable=False)  # 'BUY' hoặc 'SELL'
+    signal_type = Column(String(10), nullable=False)
     signal_time = Column(DateTime, nullable=False)
     price = Column(String(20), nullable=False)
     stoch_m15 = Column(String(10), nullable=False)
@@ -54,12 +54,13 @@ class DatabaseManager:
     def __init__(self, database_url=None):
         """
         Khởi tạo kết nối database
-        
-        Args:
-            database_url: URL kết nối PostgreSQL (nếu None sẽ lấy từ config)
         """
         if database_url is None:
             database_url = config.DATABASE_URL
+        
+        # Psycopg3 dùng postgresql+psycopg thay vì postgresql+psycopg2
+        if database_url.startswith('postgresql://'):
+            database_url = database_url.replace('postgresql://', 'postgresql+psycopg://')
         
         self.engine = create_engine(database_url)
         Base.metadata.create_all(self.engine)
