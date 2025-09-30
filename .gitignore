@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+ENV/
+env/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Test files (không cần trên Railway)
+test_cvd.py
+simple_test.py
+
+# Database local
+*.db
+*.sqlite
