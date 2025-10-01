@@ -8,6 +8,7 @@ import pytz
 from datetime import datetime
 from cvd_indicator import CVDIndicator
 from stochastic_indicator import StochasticIndicator
+from support_resistance import SupportResistanceChannel
 import config
 
 VIETNAM_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -30,6 +31,13 @@ class SignalScanner:
             k_period=config.STOCH_K_PERIOD,
             k_smooth=config.STOCH_K_SMOOTH,
             d_smooth=config.STOCH_D_SMOOTH
+        )
+        self.sr = SupportResistanceChannel(
+            pivot_period=config.SR_PIVOT_PERIOD,
+            channel_width_percent=config.SR_CHANNEL_WIDTH_PERCENT,
+            loopback_period=config.SR_LOOPBACK_PERIOD,
+            min_strength=config.SR_MIN_STRENGTH,
+            max_channels=config.SR_MAX_CHANNELS
         )
     
     def fetch_data(self, symbol, timeframe, limit=100):
@@ -74,9 +82,9 @@ class SignalScanner:
             dict hoặc None nếu không có tín hiệu
         """
         try:
-            # Lấy dữ liệu (chỉ 100 nến thay vì 500)
+            # Lấy dữ liệu
             df_m15 = self.fetch_data(symbol, '15m', limit=200)
-            df_h1 = self.fetch_data(symbol, '1h', limit=100)
+            df_h1 = self.fetch_data(symbol, '1h', limit=500)
             
             if df_m15 is None or df_h1 is None:
                 return None
@@ -88,7 +96,7 @@ class SignalScanner:
             stoch_k_m15, _ = self.stoch.calculate(df_m15)
             stoch_k_h1, _ = self.stoch.calculate(df_h1)
             
-            # Tìm phân kỳ CVD trên H1 (CHỈ KIỂM TRA 30 NẾN GẦN NHẤT)
+            # Tìm phân kỳ CVD trên H1
             divergence_info = self._detect_divergence_h1(df_h1, cvd_values)
             
             if not divergence_info:
@@ -101,7 +109,6 @@ class SignalScanner:
             try:
                 h1_idx = df_h1.index.get_loc(signal_time)
             except KeyError:
-                # Nếu không tìm thấy exact match, tìm gần nhất
                 h1_idx = df_h1.index.get_indexer([signal_time], method='nearest')[0]
             
             stoch_h1_value = stoch_k_h1.iloc[h1_idx]
@@ -110,12 +117,30 @@ class SignalScanner:
             m15_idx = df_m15.index.get_indexer([signal_time], method='nearest')[0]
             stoch_m15_value = stoch_k_m15.iloc[m15_idx]
             
+            # Kiểm tra điều kiện S/R (nếu enabled)
+            in_support_zone = True
+            in_resistance_zone = True
+            
+            if config.SR_ENABLED:
+                # PHÂN TÍCH S/R 1 LẦN DUY NHẤT
+                sr_result = self.sr.analyze(df_h1)
+                
+                # Lấy Low/High của nến tại thời điểm phân kỳ
+                candle_low = df_h1['low'].iloc[h1_idx]
+                candle_high = df_h1['high'].iloc[h1_idx]
+                
+                # Kiểm tra Low có chạm Support không
+                in_support_zone = self._check_price_in_support_with_result(sr_result, candle_low)
+                
+                # Kiểm tra High có chạm Resistance không
+                in_resistance_zone = self._check_price_in_resistance_with_result(sr_result, candle_high)
+            
             # Kiểm tra điều kiện tín hiệu
             signal = None
             
             if divergence_info['type'] == 'bullish':
-                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25
-                if stoch_h1_value < 25 and stoch_m15_value < 25:
+                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Low trong vùng Support
+                if stoch_h1_value < 25 and stoch_m15_value < 25 and in_support_zone:
                     signal = {
                         'symbol': symbol,
                         'signal_type': 'BUY',
@@ -128,8 +153,8 @@ class SignalScanner:
                     }
             
             elif divergence_info['type'] == 'bearish':
-                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75
-                if stoch_h1_value > 75 and stoch_m15_value > 75:
+                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & High trong vùng Resistance
+                if stoch_h1_value > 75 and stoch_m15_value > 75 and in_resistance_zone:
                     signal = {
                         'symbol': symbol,
                         'signal_type': 'SELL',
@@ -147,6 +172,92 @@ class SignalScanner:
             print(f"Lỗi khi kiểm tra tín hiệu {symbol}: {str(e)}")
             return None
     
+    def _check_price_in_support_with_result(self, result: dict, price: float) -> bool:
+        """
+        Kiểm tra giá có nằm trong vùng support không (dùng kết quả đã có)
+        
+        Args:
+            result: Kết quả từ sr.analyze()
+            price: Giá cần check (thường là Low của nến)
+            
+        Returns:
+            bool: True nếu trong support zone
+        """
+        if not result['success']:
+            return False
+        
+        # Kiểm tra price có nằm trong vùng support nào không
+        for support in result['supports']:
+            if price <= support['high'] and price >= support['low']:
+                return True
+        
+        # Kiểm tra nếu đang trong channel và gần support
+        if result['in_channel']:
+            channel = result['in_channel']
+            if price <= channel['high'] and price >= channel['low']:
+                distance_to_low = abs(price - channel['low'])
+                distance_to_high = abs(price - channel['high'])
+                return distance_to_low < distance_to_high
+        
+        return False
+    
+    def _check_price_in_resistance_with_result(self, result: dict, price: float) -> bool:
+        """
+        Kiểm tra giá có nằm trong vùng resistance không (dùng kết quả đã có)
+        
+        Args:
+            result: Kết quả từ sr.analyze()
+            price: Giá cần check (thường là High của nến)
+            
+        Returns:
+            bool: True nếu trong resistance zone
+        """
+        if not result['success']:
+            return False
+        
+        # Kiểm tra price có nằm trong vùng resistance nào không
+        for resistance in result['resistances']:
+            if price <= resistance['high'] and price >= resistance['low']:
+                return True
+        
+        # Kiểm tra nếu đang trong channel và gần resistance
+        if result['in_channel']:
+            channel = result['in_channel']
+            if price <= channel['high'] and price >= channel['low']:
+                distance_to_low = abs(price - channel['low'])
+                distance_to_high = abs(price - channel['high'])
+                return distance_to_high < distance_to_low
+        
+        return False
+    
+    def _check_price_in_support(self, df: pd.DataFrame, price: float) -> bool:
+        """
+        Kiểm tra giá có nằm trong vùng support không (backward compatibility)
+        
+        Args:
+            df: DataFrame
+            price: Giá cần check
+            
+        Returns:
+            bool: True nếu trong support zone
+        """
+        result = self.sr.analyze(df)
+        return self._check_price_in_support_with_result(result, price)
+    
+    def _check_price_in_resistance(self, df: pd.DataFrame, price: float) -> bool:
+        """
+        Kiểm tra giá có nằm trong vùng resistance không (backward compatibility)
+        
+        Args:
+            df: DataFrame
+            price: Giá cần check
+            
+        Returns:
+            bool: True nếu trong resistance zone
+        """
+        result = self.sr.analyze(df)
+        return self._check_price_in_resistance_with_result(result, price)
+    
     def _detect_divergence_h1(self, df_h1, cvd_values):
         """
         Phát hiện phân kỳ CVD trên H1 - CHỈ KIỂM TRA 30 NẾN GẦN NHẤT
@@ -158,10 +269,10 @@ class SignalScanner:
             ema_50 = df_h1['close'].ewm(span=50, adjust=False).mean()
             n = config.CVD_DIVERGENCE_PERIOD
             
-            # CHỈ KIỂM TRA 30 NẾN GẦN NHẤT (quan trọng!)
+            # CHỈ KIỂM TRA 30 NẾN GẦN NHẤT
             start_idx = max(n, len(df_h1) - 30)
             
-            # Tìm pivot high (bearish divergence) - chỉ trong 30 nến cuối
+            # Tìm pivot high (bearish divergence)
             pivot_highs = []
             for i in range(start_idx, len(df_h1) - n):
                 is_pivot = True
@@ -178,7 +289,7 @@ class SignalScanner:
                         'cvd': cvd_values.iloc[i]
                     })
             
-            # Kiểm tra phân kỳ giảm (lấy 2 pivot cuối)
+            # Kiểm tra phân kỳ giảm
             if len(pivot_highs) >= 2:
                 prev = pivot_highs[-2]
                 curr = pivot_highs[-1]
@@ -193,7 +304,7 @@ class SignalScanner:
                             'time': curr['time']
                         }
             
-            # Tìm pivot low (bullish divergence) - chỉ trong 30 nến cuối
+            # Tìm pivot low (bullish divergence)
             pivot_lows = []
             for i in range(start_idx, len(df_h1) - n):
                 is_pivot = True
@@ -210,7 +321,7 @@ class SignalScanner:
                         'cvd': cvd_values.iloc[i]
                     })
             
-            # Kiểm tra phân kỳ tăng (lấy 2 pivot cuối)
+            # Kiểm tra phân kỳ tăng
             if len(pivot_lows) >= 2:
                 prev = pivot_lows[-2]
                 curr = pivot_lows[-1]

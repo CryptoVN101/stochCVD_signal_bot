@@ -3,22 +3,76 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
 venv/
 ENV/
 env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environment
+# Environment variables
 .env
 .env.local
+.env.*.local
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-# Test files (không cần trên Railway)
+# Test files (không push lên GitHub nhưng giữ local)
 test_cvd.py
+test_signals.py
 simple_test.py
+backtest_sr.py
+test_sr.py
 
 # Database local
 *.db
 *.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Documents không cần thiết
+*.pdf
+*.txt
+!requirements.txt
+*.docx
+
+# Backup files
+*.bak
+*.tmp
+*.temp
