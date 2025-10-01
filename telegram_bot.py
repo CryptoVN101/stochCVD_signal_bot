@@ -68,8 +68,8 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
 📍 Support/Resistance: Filter tín hiệu tại vùng quan trọng
 
 <b>Điều kiện tín hiệu:</b>
-🟢 BUY: CVD phân kỳ tăng + Stoch H1<25 & M15<25 + Low chạm Support
-🔴 SELL: CVD phân kỳ giảm + Stoch H1>75 & M15>75 + High chạm Resistance
+🟢 BUY: CVD phân kỳ tăng + Stoch H1&lt;25 &amp; M15&lt;25 + Low chạm Support
+🔴 SELL: CVD phân kỳ giảm + Stoch H1&gt;75 &amp; M15&gt;75 + High chạm Resistance
 """
         await update.message.reply_text(welcome_msg, parse_mode=ParseMode.HTML)
     
