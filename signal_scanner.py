@@ -141,6 +141,22 @@ class SignalScanner:
             if divergence_info['type'] == 'bullish':
                 # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Low trong vùng Support
                 if stoch_h1_value < 25 and stoch_m15_value < 25 and in_support_zone:
+                    # Tìm vùng support đã match
+                    matched_support = None
+                    for support in sr_result['supports']:
+                        if candle_low <= support['high'] and candle_low >= support['low']:
+                            matched_support = support
+                            break
+                    
+                    # Kiểm tra channel nếu không match support trực tiếp
+                    if not matched_support and sr_result['in_channel']:
+                        channel = sr_result['in_channel']
+                        if candle_low <= channel['high'] and candle_low >= channel['low']:
+                            distance_to_low = abs(candle_low - channel['low'])
+                            distance_to_high = abs(candle_low - channel['high'])
+                            if distance_to_low < distance_to_high:
+                                matched_support = channel
+                    
                     signal = {
                         'symbol': symbol,
                         'signal_type': 'BUY',
@@ -149,12 +165,33 @@ class SignalScanner:
                         'confirm_time': datetime.now(VIETNAM_TZ),
                         'stoch_m15': stoch_m15_value,
                         'stoch_h1': stoch_h1_value,
-                        'signal_id': f"{symbol}_{signal_time.strftime('%Y%m%d%H%M')}_BUY"
+                        'signal_id': f"{symbol}_{signal_time.strftime('%Y%m%d%H%M')}_BUY",
+                        'sr_zone': {
+                            'type': 'support',
+                            'low': matched_support['low'] if matched_support else None,
+                            'high': matched_support['high'] if matched_support else None
+                        } if matched_support else None
                     }
             
             elif divergence_info['type'] == 'bearish':
                 # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & High trong vùng Resistance
                 if stoch_h1_value > 75 and stoch_m15_value > 75 and in_resistance_zone:
+                    # Tìm vùng resistance đã match
+                    matched_resistance = None
+                    for resistance in sr_result['resistances']:
+                        if candle_high <= resistance['high'] and candle_high >= resistance['low']:
+                            matched_resistance = resistance
+                            break
+                    
+                    # Kiểm tra channel nếu không match resistance trực tiếp
+                    if not matched_resistance and sr_result['in_channel']:
+                        channel = sr_result['in_channel']
+                        if candle_high <= channel['high'] and candle_high >= channel['low']:
+                            distance_to_low = abs(candle_high - channel['low'])
+                            distance_to_high = abs(candle_high - channel['high'])
+                            if distance_to_high < distance_to_low:
+                                matched_resistance = channel
+                    
                     signal = {
                         'symbol': symbol,
                         'signal_type': 'SELL',
@@ -163,7 +200,12 @@ class SignalScanner:
                         'confirm_time': datetime.now(VIETNAM_TZ),
                         'stoch_m15': stoch_m15_value,
                         'stoch_h1': stoch_h1_value,
-                        'signal_id': f"{symbol}_{signal_time.strftime('%Y%m%d%H%M')}_SELL"
+                        'signal_id': f"{symbol}_{signal_time.strftime('%Y%m%d%H%M')}_SELL",
+                        'sr_zone': {
+                            'type': 'resistance',
+                            'low': matched_resistance['low'] if matched_resistance else None,
+                            'high': matched_resistance['high'] if matched_resistance else None
+                        } if matched_resistance else None
                     }
             
             return signal

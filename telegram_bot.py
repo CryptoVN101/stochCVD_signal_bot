@@ -65,10 +65,11 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
 <b>Thiết lập:</b>
 📊 CVD: Fractal=1, Period=16, Mode=EMA, Khung H1
 📈 Stochastic: K=16, Smooth=16, D=8
+📍 Support/Resistance: Filter tín hiệu tại vùng quan trọng
 
 <b>Điều kiện tín hiệu:</b>
-🟢 BUY: CVD phân kỳ tăng + Stoch H1<25 & M15<25
-🔴 SELL: CVD phân kỳ giảm + Stoch H1>75 & M15>75
+🟢 BUY: CVD phân kỳ tăng + Stoch H1<25 & M15<25 + Low chạm Support
+🔴 SELL: CVD phân kỳ giảm + Stoch H1>75 & M15>75 + High chạm Resistance
 """
         await update.message.reply_text(welcome_msg, parse_mode=ParseMode.HTML)
     
@@ -137,12 +138,14 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
 🟢 <b>Tín hiệu BUY/LONG:</b>
 - CVD báo phân kỳ tăng trên H1
 - Stochastic H1 < 25 VÀ M15 < 25
-- → Tín hiệu đảo chiều tăng
+- Low của nến chạm vùng Support
+→ Tín hiệu đảo chiều tăng
 
 🔴 <b>Tín hiệu SELL/SHORT:</b>
 - CVD báo phân kỳ giảm trên H1
 - Stochastic H1 > 75 VÀ M15 > 75
-- → Tín hiệu đảo chiều giảm
+- High của nến chạm vùng Resistance
+→ Tín hiệu đảo chiều giảm
 
 ⚠️ <b>Lưu ý:</b>
 - Đây chỉ là công cụ hỗ trợ
@@ -181,12 +184,20 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
         signal_time_str = signal_time.strftime('%H:%M %d-%m-%Y')
         confirm_time_str = confirm_time.strftime('%H:%M %d-%m-%Y')
         
+        # Thêm thông tin S/R nếu có
+        sr_info = ""
+        if signal.get('sr_zone'):
+            sr_zone = signal['sr_zone']
+            if sr_zone['low'] and sr_zone['high']:
+                zone_type = "Support" if sr_zone['type'] == 'support' else "Resistance"
+                sr_info = f"📍 Vùng {zone_type}: ${sr_zone['low']:.4f} - ${sr_zone['high']:.4f}\n"
+        
         message = f"""
 🔶 Token: {symbol}
 {icon} Tín hiệu đảo chiều {type_text}
 ⏰ Khung thời gian: H1
 💰 Giá xác nhận: {price:.4f}
----------------------------------
+{sr_info}---------------------------------
 Thời gian gốc: {signal_time_str}
 Thời gian xác nhận: {confirm_time_str}
 Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
