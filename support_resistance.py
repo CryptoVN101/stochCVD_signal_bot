@@ -273,7 +273,7 @@ class SupportResistanceChannel:
                     'strength': total_strength
                 })
         
-        # Loại bỏ channels trùng lặp (ĐÃ SỬA)
+        # Loại bỏ channels trùng lặp
         unique_channels = []
         seen_positions = set()
         
@@ -304,19 +304,46 @@ class SupportResistanceChannel:
         # Giữ top channels
         top_channels = sorted_channels[:self.max_channels]
         
-        # Phân loại Support/Resistance
+        # Phân loại Support/Resistance (ĐÃ SỬA - LOGIC MỚI)
         current_price = df['close'].iloc[-1]
         supports = []
         resistances = []
         in_channel = None
         
+        # Tolerance tuyệt đối rất nhỏ để xử lý giá sát vùng
+        price_tolerance = 0.0001
+        
         for channel in top_channels:
-            if channel['high'] < current_price and channel['low'] < current_price:
+            mid_channel = (channel['low'] + channel['high']) / 2
+            
+            # Kiểm tra giá có nằm trong hoặc rất gần zone
+            is_near_or_in_zone = (
+                abs(channel['high'] - current_price) < price_tolerance or
+                abs(channel['low'] - current_price) < price_tolerance or
+                (channel['low'] <= current_price <= channel['high'])
+            )
+            
+            if is_near_or_in_zone:
+                # Giá nằm trong hoặc rất gần zone
+                # Xác định dựa trên vị trí so với mid
+                if current_price < mid_channel:
+                    # Giá dưới trung điểm → zone này là Resistance phía trên
+                    resistances.append(channel)
+                else:
+                    # Giá trên trung điểm → zone này là Support phía dưới
+                    supports.append(channel)
+                
+                # Đánh dấu in_channel cho tracking
+                if in_channel is None:
+                    in_channel = channel
+            
+            elif channel['high'] < current_price:
+                # Zone hoàn toàn dưới giá → Support
                 supports.append(channel)
-            elif channel['high'] > current_price and channel['low'] > current_price:
+            
+            elif channel['low'] > current_price:
+                # Zone hoàn toàn trên giá → Resistance
                 resistances.append(channel)
-            else:
-                in_channel = channel
         
         return {
             'success': True,

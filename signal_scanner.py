@@ -129,33 +129,32 @@ class SignalScanner:
                 candle_low = df_h1['low'].iloc[h1_idx]
                 candle_high = df_h1['high'].iloc[h1_idx]
                 
-                # Kiểm tra Low có chạm Support không
-                in_support_zone = self._check_price_in_support_with_result(sr_result, candle_low)
+                # Kiểm tra NẾN có chạm Support không (toàn bộ nến)
+                in_support_zone = self._check_candle_touching_support(
+                    sr_result, 
+                    candle_low, 
+                    candle_high
+                )
                 
-                # Kiểm tra High có chạm Resistance không
-                in_resistance_zone = self._check_price_in_resistance_with_result(sr_result, candle_high)
+                # Kiểm tra NẾN có chạm Resistance không (toàn bộ nến)
+                in_resistance_zone = self._check_candle_touching_resistance(
+                    sr_result, 
+                    candle_low, 
+                    candle_high
+                )
             
             # Kiểm tra điều kiện tín hiệu
             signal = None
             
             if divergence_info['type'] == 'bullish':
-                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Low trong vùng Support
+                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Nến chạm Support
                 if stoch_h1_value < 25 and stoch_m15_value < 25 and in_support_zone:
                     # Tìm vùng support đã match
-                    matched_support = None
-                    for support in sr_result['supports']:
-                        if candle_low <= support['high'] and candle_low >= support['low']:
-                            matched_support = support
-                            break
-                    
-                    # Kiểm tra channel nếu không match support trực tiếp
-                    if not matched_support and sr_result['in_channel']:
-                        channel = sr_result['in_channel']
-                        if candle_low <= channel['high'] and candle_low >= channel['low']:
-                            distance_to_low = abs(candle_low - channel['low'])
-                            distance_to_high = abs(candle_low - channel['high'])
-                            if distance_to_low < distance_to_high:
-                                matched_support = channel
+                    matched_support = self._find_matched_support(
+                        sr_result, 
+                        candle_low, 
+                        candle_high
+                    )
                     
                     signal = {
                         'symbol': symbol,
@@ -174,23 +173,14 @@ class SignalScanner:
                     }
             
             elif divergence_info['type'] == 'bearish':
-                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & High trong vùng Resistance
+                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & Nến chạm Resistance
                 if stoch_h1_value > 75 and stoch_m15_value > 75 and in_resistance_zone:
                     # Tìm vùng resistance đã match
-                    matched_resistance = None
-                    for resistance in sr_result['resistances']:
-                        if candle_high <= resistance['high'] and candle_high >= resistance['low']:
-                            matched_resistance = resistance
-                            break
-                    
-                    # Kiểm tra channel nếu không match resistance trực tiếp
-                    if not matched_resistance and sr_result['in_channel']:
-                        channel = sr_result['in_channel']
-                        if candle_high <= channel['high'] and candle_high >= channel['low']:
-                            distance_to_low = abs(candle_high - channel['low'])
-                            distance_to_high = abs(candle_high - channel['high'])
-                            if distance_to_high < distance_to_low:
-                                matched_resistance = channel
+                    matched_resistance = self._find_matched_resistance(
+                        sr_result, 
+                        candle_low, 
+                        candle_high
+                    )
                     
                     signal = {
                         'symbol': symbol,
@@ -214,91 +204,195 @@ class SignalScanner:
             print(f"Lỗi khi kiểm tra tín hiệu {symbol}: {str(e)}")
             return None
     
-    def _check_price_in_support_with_result(self, result: dict, price: float) -> bool:
+    def _check_candle_touching_support(
+        self, 
+        result: dict, 
+        candle_low: float, 
+        candle_high: float
+    ) -> bool:
         """
-        Kiểm tra giá có nằm trong vùng support không (dùng kết quả đã có)
+        Kiểm tra NẾN có chạm vùng support không
+        
+        Logic: Nến chạm zone nếu:
+        1. Low nằm trong zone, HOẶC
+        2. High nằm trong zone, HOẶC
+        3. Nến xuyên qua zone (Low < zone_low VÀ High > zone_high)
         
         Args:
             result: Kết quả từ sr.analyze()
-            price: Giá cần check (thường là Low của nến)
+            candle_low: Low của nến
+            candle_high: High của nến
             
         Returns:
-            bool: True nếu trong support zone
+            bool: True nếu nến chạm support zone
         """
         if not result['success']:
             return False
         
-        # Kiểm tra price có nằm trong vùng support nào không
+        # Kiểm tra với các vùng support
         for support in result['supports']:
-            if price <= support['high'] and price >= support['low']:
+            zone_low = support['low']
+            zone_high = support['high']
+            
+            # Kiểm tra overlap/xuyên qua
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
                 return True
         
         # Kiểm tra nếu đang trong channel và gần support
         if result['in_channel']:
             channel = result['in_channel']
-            if price <= channel['high'] and price >= channel['low']:
-                distance_to_low = abs(price - channel['low'])
-                distance_to_high = abs(price - channel['high'])
+            zone_low = channel['low']
+            zone_high = channel['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                # Kiểm tra xem gần đáy channel hơn
+                mid_price = (candle_low + candle_high) / 2
+                distance_to_low = abs(mid_price - zone_low)
+                distance_to_high = abs(mid_price - zone_high)
                 return distance_to_low < distance_to_high
         
         return False
     
-    def _check_price_in_resistance_with_result(self, result: dict, price: float) -> bool:
+    def _check_candle_touching_resistance(
+        self, 
+        result: dict, 
+        candle_low: float, 
+        candle_high: float
+    ) -> bool:
         """
-        Kiểm tra giá có nằm trong vùng resistance không (dùng kết quả đã có)
+        Kiểm tra NẾN có chạm vùng resistance không
+        
+        Logic: Nến chạm zone nếu:
+        1. Low nằm trong zone, HOẶC
+        2. High nằm trong zone, HOẶC
+        3. Nến xuyên qua zone (Low < zone_low VÀ High > zone_high)
         
         Args:
             result: Kết quả từ sr.analyze()
-            price: Giá cần check (thường là High của nến)
+            candle_low: Low của nến
+            candle_high: High của nến
             
         Returns:
-            bool: True nếu trong resistance zone
+            bool: True nếu nến chạm resistance zone
         """
         if not result['success']:
             return False
         
-        # Kiểm tra price có nằm trong vùng resistance nào không
+        # Kiểm tra với các vùng resistance
         for resistance in result['resistances']:
-            if price <= resistance['high'] and price >= resistance['low']:
+            zone_low = resistance['low']
+            zone_high = resistance['high']
+            
+            # Kiểm tra overlap/xuyên qua
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
                 return True
         
         # Kiểm tra nếu đang trong channel và gần resistance
         if result['in_channel']:
             channel = result['in_channel']
-            if price <= channel['high'] and price >= channel['low']:
-                distance_to_low = abs(price - channel['low'])
-                distance_to_high = abs(price - channel['high'])
+            zone_low = channel['low']
+            zone_high = channel['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                # Kiểm tra xem gần đỉnh channel hơn
+                mid_price = (candle_low + candle_high) / 2
+                distance_to_low = abs(mid_price - zone_low)
+                distance_to_high = abs(mid_price - zone_high)
                 return distance_to_high < distance_to_low
         
         return False
     
-    def _check_price_in_support(self, df: pd.DataFrame, price: float) -> bool:
+    def _find_matched_support(
+        self, 
+        result: dict, 
+        candle_low: float, 
+        candle_high: float
+    ) -> dict:
         """
-        Kiểm tra giá có nằm trong vùng support không (backward compatibility)
+        Tìm vùng support mà nến đã chạm vào
         
-        Args:
-            df: DataFrame
-            price: Giá cần check
-            
         Returns:
-            bool: True nếu trong support zone
+            dict với 'low' và 'high', hoặc None nếu không tìm thấy
         """
-        result = self.sr.analyze(df)
-        return self._check_price_in_support_with_result(result, price)
+        if not result['success']:
+            return None
+        
+        # Tìm trong support zones
+        for support in result['supports']:
+            zone_low = support['low']
+            zone_high = support['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                return support
+        
+        # Kiểm tra channel
+        if result['in_channel']:
+            channel = result['in_channel']
+            zone_low = channel['low']
+            zone_high = channel['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                mid_price = (candle_low + candle_high) / 2
+                distance_to_low = abs(mid_price - zone_low)
+                distance_to_high = abs(mid_price - zone_high)
+                if distance_to_low < distance_to_high:
+                    return channel
+        
+        return None
     
-    def _check_price_in_resistance(self, df: pd.DataFrame, price: float) -> bool:
+    def _find_matched_resistance(
+        self, 
+        result: dict, 
+        candle_low: float, 
+        candle_high: float
+    ) -> dict:
         """
-        Kiểm tra giá có nằm trong vùng resistance không (backward compatibility)
+        Tìm vùng resistance mà nến đã chạm vào
         
-        Args:
-            df: DataFrame
-            price: Giá cần check
-            
         Returns:
-            bool: True nếu trong resistance zone
+            dict với 'low' và 'high', hoặc None nếu không tìm thấy
         """
-        result = self.sr.analyze(df)
-        return self._check_price_in_resistance_with_result(result, price)
+        if not result['success']:
+            return None
+        
+        # Tìm trong resistance zones
+        for resistance in result['resistances']:
+            zone_low = resistance['low']
+            zone_high = resistance['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                return resistance
+        
+        # Kiểm tra channel
+        if result['in_channel']:
+            channel = result['in_channel']
+            zone_low = channel['low']
+            zone_high = channel['high']
+            
+            if (zone_low <= candle_low <= zone_high) or \
+               (zone_low <= candle_high <= zone_high) or \
+               (candle_low <= zone_low and candle_high >= zone_high):
+                mid_price = (candle_low + candle_high) / 2
+                distance_to_low = abs(mid_price - zone_low)
+                distance_to_high = abs(mid_price - zone_high)
+                if distance_to_high < distance_to_low:
+                    return channel
+        
+        return None
     
     def _detect_divergence_h1(self, df_h1, cvd_values):
         """

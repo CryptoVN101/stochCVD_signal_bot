@@ -13,7 +13,7 @@ VIETNAM_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 def test_signal_with_sr():
     """Test tín hiệu có S/R filter"""
     
-    symbols = ["WUSDT", "AVAXUSDT", "ZROUSDT"]
+    symbols = ["EIGENUSDT"]
     
     print("\n" + "="*70)
     print("TEST TÍN HIỆU VỚI FILTER SUPPORT/RESISTANCE")

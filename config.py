@@ -109,6 +109,6 @@ LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'# Thêm vào 
 SR_PIVOT_PERIOD = 10              # Chu kỳ pivot
 SR_CHANNEL_WIDTH_PERCENT = 5.0    # % độ rộng channel (giảm xuống 3-4 nếu muốn nhạy hơn)
 SR_LOOPBACK_PERIOD = 290          # Số nến nhìn lại
-SR_MIN_STRENGTH = 50              # Strength tối thiểu (tăng lên để lọc vùng yếu)
+SR_MIN_STRENGTH = 1              # Strength tối thiểu (tăng lên để lọc vùng yếu)
 SR_MAX_CHANNELS = 6               # Số channels hiển thị
 SR_ENABLED = True                 # Bật/tắt filter S/R
