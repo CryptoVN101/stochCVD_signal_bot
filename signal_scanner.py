@@ -125,35 +125,39 @@ class SignalScanner:
                 # PHÂN TÍCH S/R 1 LẦN DUY NHẤT
                 sr_result = self.sr.analyze(df_h1)
                 
-                # Lấy Low/High của nến tại thời điểm phân kỳ
+                # Lấy OHLC của nến tại thời điểm phân kỳ
                 candle_low = df_h1['low'].iloc[h1_idx]
                 candle_high = df_h1['high'].iloc[h1_idx]
+                candle_close = df_h1['close'].iloc[h1_idx]
                 
-                # Kiểm tra NẾN có chạm Support không (toàn bộ nến)
+                # Kiểm tra Price Action với Support
                 in_support_zone = self._check_candle_touching_support(
                     sr_result, 
                     candle_low, 
-                    candle_high
+                    candle_high,
+                    candle_close
                 )
                 
-                # Kiểm tra NẾN có chạm Resistance không (toàn bộ nến)
+                # Kiểm tra Price Action với Resistance
                 in_resistance_zone = self._check_candle_touching_resistance(
                     sr_result, 
                     candle_low, 
-                    candle_high
+                    candle_high,
+                    candle_close
                 )
             
             # Kiểm tra điều kiện tín hiệu
             signal = None
             
             if divergence_info['type'] == 'bullish':
-                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Nến chạm Support
+                # Tín hiệu BUY: Stoch H1 < 25 & M15 < 25 & Price Action tại Support
                 if stoch_h1_value < 25 and stoch_m15_value < 25 and in_support_zone:
                     # Tìm vùng support đã match
                     matched_support = self._find_matched_support(
                         sr_result, 
                         candle_low, 
-                        candle_high
+                        candle_high,
+                        candle_close
                     )
                     
                     signal = {
@@ -173,13 +177,14 @@ class SignalScanner:
                     }
             
             elif divergence_info['type'] == 'bearish':
-                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & Nến chạm Resistance
+                # Tín hiệu SELL: Stoch H1 > 75 & M15 > 75 & Price Action tại Resistance
                 if stoch_h1_value > 75 and stoch_m15_value > 75 and in_resistance_zone:
                     # Tìm vùng resistance đã match
                     matched_resistance = self._find_matched_resistance(
                         sr_result, 
                         candle_low, 
-                        candle_high
+                        candle_high,
+                        candle_close
                     )
                     
                     signal = {
@@ -208,23 +213,25 @@ class SignalScanner:
         self, 
         result: dict, 
         candle_low: float, 
-        candle_high: float
+        candle_high: float,
+        candle_close: float
     ) -> bool:
         """
-        Kiểm tra NẾN có chạm vùng support không
+        Kiểm tra NẾN có rejection tại vùng support không (Price Action)
         
-        Logic: Nến chạm zone nếu:
-        1. Low nằm trong zone, HOẶC
-        2. High nằm trong zone, HOẶC
-        3. Nến xuyên qua zone (Low < zone_low VÀ High > zone_high)
+        Logic LONG:
+        - Thân nến trong zone: Close > zone_low (đóng cửa phía trên đáy zone)
+        - Râu dưới test zone: Low <= zone_high (Low chạm hoặc trong zone)
+        → Rejection = giá test xuống rồi đẩy lên
         
         Args:
             result: Kết quả từ sr.analyze()
             candle_low: Low của nến
             candle_high: High của nến
+            candle_close: Close của nến
             
         Returns:
-            bool: True nếu nến chạm support zone
+            bool: True nếu có rejection tại support
         """
         if not result['success']:
             return False
@@ -234,26 +241,25 @@ class SignalScanner:
             zone_low = support['low']
             zone_high = support['high']
             
-            # Kiểm tra overlap/xuyên qua
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
+            # Price action: thân nến trong zone + râu test
+            if candle_close > zone_low and candle_low <= zone_high:
                 return True
         
-        # Kiểm tra nếu đang trong channel và gần support
+        # Kiểm tra in_channel (nếu gần support hơn)
         if result['in_channel']:
             channel = result['in_channel']
             zone_low = channel['low']
             zone_high = channel['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
-                # Kiểm tra xem gần đáy channel hơn
-                mid_price = (candle_low + candle_high) / 2
-                distance_to_low = abs(mid_price - zone_low)
-                distance_to_high = abs(mid_price - zone_high)
-                return distance_to_low < distance_to_high
+            # Kiểm tra gần support (đáy channel) hơn
+            mid_price = (candle_low + candle_high) / 2
+            distance_to_low = abs(mid_price - zone_low)
+            distance_to_high = abs(mid_price - zone_high)
+            
+            if distance_to_low < distance_to_high:
+                # Gần support → kiểm tra price action
+                if candle_close > zone_low and candle_low <= zone_high:
+                    return True
         
         return False
     
@@ -261,23 +267,25 @@ class SignalScanner:
         self, 
         result: dict, 
         candle_low: float, 
-        candle_high: float
+        candle_high: float,
+        candle_close: float
     ) -> bool:
         """
-        Kiểm tra NẾN có chạm vùng resistance không
+        Kiểm tra NẾN có rejection tại vùng resistance không (Price Action)
         
-        Logic: Nến chạm zone nếu:
-        1. Low nằm trong zone, HOẶC
-        2. High nằm trong zone, HOẶC
-        3. Nến xuyên qua zone (Low < zone_low VÀ High > zone_high)
+        Logic SHORT:
+        - Thân nến trong zone: Close < zone_high (đóng cửa phía dưới đỉnh zone)
+        - Râu trên test zone: High >= zone_low (High chạm hoặc trong zone)
+        → Rejection = giá test lên rồi đẩy xuống
         
         Args:
             result: Kết quả từ sr.analyze()
             candle_low: Low của nến
             candle_high: High của nến
+            candle_close: Close của nến
             
         Returns:
-            bool: True nếu nến chạm resistance zone
+            bool: True nếu có rejection tại resistance
         """
         if not result['success']:
             return False
@@ -287,26 +295,25 @@ class SignalScanner:
             zone_low = resistance['low']
             zone_high = resistance['high']
             
-            # Kiểm tra overlap/xuyên qua
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
+            # Price action: thân nến trong zone + râu test
+            if candle_close < zone_high and candle_high >= zone_low:
                 return True
         
-        # Kiểm tra nếu đang trong channel và gần resistance
+        # Kiểm tra in_channel (nếu gần resistance hơn)
         if result['in_channel']:
             channel = result['in_channel']
             zone_low = channel['low']
             zone_high = channel['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
-                # Kiểm tra xem gần đỉnh channel hơn
-                mid_price = (candle_low + candle_high) / 2
-                distance_to_low = abs(mid_price - zone_low)
-                distance_to_high = abs(mid_price - zone_high)
-                return distance_to_high < distance_to_low
+            # Kiểm tra gần resistance (đỉnh channel) hơn
+            mid_price = (candle_low + candle_high) / 2
+            distance_to_low = abs(mid_price - zone_low)
+            distance_to_high = abs(mid_price - zone_high)
+            
+            if distance_to_high < distance_to_low:
+                # Gần resistance → kiểm tra price action
+                if candle_close < zone_high and candle_high >= zone_low:
+                    return True
         
         return False
     
@@ -314,10 +321,11 @@ class SignalScanner:
         self, 
         result: dict, 
         candle_low: float, 
-        candle_high: float
+        candle_high: float,
+        candle_close: float
     ) -> dict:
         """
-        Tìm vùng support mà nến đã chạm vào
+        Tìm vùng support mà nến đã rejection
         
         Returns:
             dict với 'low' và 'high', hoặc None nếu không tìm thấy
@@ -330,9 +338,7 @@ class SignalScanner:
             zone_low = support['low']
             zone_high = support['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
+            if candle_close > zone_low and candle_low <= zone_high:
                 return support
         
         # Kiểm tra channel
@@ -341,13 +347,12 @@ class SignalScanner:
             zone_low = channel['low']
             zone_high = channel['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
-                mid_price = (candle_low + candle_high) / 2
-                distance_to_low = abs(mid_price - zone_low)
-                distance_to_high = abs(mid_price - zone_high)
-                if distance_to_low < distance_to_high:
+            mid_price = (candle_low + candle_high) / 2
+            distance_to_low = abs(mid_price - zone_low)
+            distance_to_high = abs(mid_price - zone_high)
+            
+            if distance_to_low < distance_to_high:
+                if candle_close > zone_low and candle_low <= zone_high:
                     return channel
         
         return None
@@ -356,10 +361,11 @@ class SignalScanner:
         self, 
         result: dict, 
         candle_low: float, 
-        candle_high: float
+        candle_high: float,
+        candle_close: float
     ) -> dict:
         """
-        Tìm vùng resistance mà nến đã chạm vào
+        Tìm vùng resistance mà nến đã rejection
         
         Returns:
             dict với 'low' và 'high', hoặc None nếu không tìm thấy
@@ -372,9 +378,7 @@ class SignalScanner:
             zone_low = resistance['low']
             zone_high = resistance['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
+            if candle_close < zone_high and candle_high >= zone_low:
                 return resistance
         
         # Kiểm tra channel
@@ -383,13 +387,12 @@ class SignalScanner:
             zone_low = channel['low']
             zone_high = channel['high']
             
-            if (zone_low <= candle_low <= zone_high) or \
-               (zone_low <= candle_high <= zone_high) or \
-               (candle_low <= zone_low and candle_high >= zone_high):
-                mid_price = (candle_low + candle_high) / 2
-                distance_to_low = abs(mid_price - zone_low)
-                distance_to_high = abs(mid_price - zone_high)
-                if distance_to_high < distance_to_low:
+            mid_price = (candle_low + candle_high) / 2
+            distance_to_low = abs(mid_price - zone_low)
+            distance_to_high = abs(mid_price - zone_high)
+            
+            if distance_to_high < distance_to_low:
+                if candle_close < zone_high and candle_high >= zone_low:
                     return channel
         
         return None

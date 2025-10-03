@@ -1,5 +1,5 @@
 """
-Debug chi tiết logic S/R
+Debug chi tiết logic S/R với Price Action
 """
 
 import pandas as pd
@@ -15,7 +15,7 @@ def debug_eigenusdt():
     """Debug chi tiết EIGENUSDT"""
     
     print("\n" + "="*70)
-    print("DEBUG: EIGENUSDT - Tín hiệu 13:00 02-10-2025")
+    print("DEBUG: EIGENUSDT - Tín hiệu 13:00 02-10-2025 (Price Action)")
     print("="*70)
     
     scanner = SignalScanner()
@@ -62,7 +62,7 @@ def debug_eigenusdt():
             print(f"\n⚪ IN_CHANNEL:")
             print(f"   ${ch['low']:.4f} - ${ch['high']:.4f} (Strength: {ch['strength']})")
         
-        # Thông tin nến
+        # Thông tin nến (THÊM CLOSE)
         candle_low = df_h1_at_signal['low'].iloc[-1]
         candle_high = df_h1_at_signal['high'].iloc[-1]
         candle_open = df_h1_at_signal['open'].iloc[-1]
@@ -74,66 +74,118 @@ def debug_eigenusdt():
         print(f"   Low:   ${candle_low:.4f}")
         print(f"   Close: ${candle_close:.4f}")
         
-        # Test logic kiểm tra (dùng method mới)
-        print(f"\n🔍 KIỂM TRA LOGIC (TOÀN BỘ NẾN):")
+        # Xác định loại nến
+        if candle_close > candle_open:
+            candle_type = "🟢 NẾN XANH (tăng)"
+        elif candle_close < candle_open:
+            candle_type = "🔴 NẾN ĐỎ (giảm)"
+        else:
+            candle_type = "⚪ NẾN DOJI"
+        print(f"   Loại: {candle_type}")
         
-        # Kiểm tra nến với Support
-        print(f"\n1. Kiểm tra nến [Low=${candle_low:.4f}, High=${candle_high:.4f}] với Support:")
-        in_support = scanner._check_candle_touching_support(sr_result, candle_low, candle_high)
+        # Test logic Price Action
+        print(f"\n🔍 KIỂM TRA LOGIC PRICE ACTION:")
+        
+        # Kiểm tra Support (LONG)
+        print(f"\n1. Kiểm tra Price Action với Support (LONG):")
+        print(f"   Điều kiện: Close > zone_low VÀ Low <= zone_high")
+        in_support = scanner._check_candle_touching_support(
+            sr_result, candle_low, candle_high, candle_close
+        )
         print(f"   Result: {in_support}")
         
         if in_support:
-            matched = scanner._find_matched_support(sr_result, candle_low, candle_high)
+            matched = scanner._find_matched_support(
+                sr_result, candle_low, candle_high, candle_close
+            )
             if matched:
                 print(f"   ✅ Matched zone: ${matched['low']:.4f} - ${matched['high']:.4f}")
         
-        # Kiểm tra nến với Resistance
-        print(f"\n2. Kiểm tra nến [Low=${candle_low:.4f}, High=${candle_high:.4f}] với Resistance:")
-        in_resistance = scanner._check_candle_touching_resistance(sr_result, candle_low, candle_high)
+        # Kiểm tra Resistance (SHORT)
+        print(f"\n2. Kiểm tra Price Action với Resistance (SHORT):")
+        print(f"   Điều kiện: Close < zone_high VÀ High >= zone_low")
+        in_resistance = scanner._check_candle_touching_resistance(
+            sr_result, candle_low, candle_high, candle_close
+        )
         print(f"   Result: {in_resistance}")
         
         if in_resistance:
-            matched = scanner._find_matched_resistance(sr_result, candle_low, candle_high)
+            matched = scanner._find_matched_resistance(
+                sr_result, candle_low, candle_high, candle_close
+            )
             if matched:
                 print(f"   ✅ Matched zone: ${matched['low']:.4f} - ${matched['high']:.4f}")
         
-        # Chi tiết từng zone
+        # Chi tiết từng Resistance zone
         if sr_result['resistances']:
             print(f"\n3. Chi tiết kiểm tra từng Resistance zone:")
             for i, resistance in enumerate(sr_result['resistances'], 1):
                 zone_low = resistance['low']
                 zone_high = resistance['high']
                 
-                # 3 điều kiện chạm zone
-                check1 = zone_low <= candle_low <= zone_high
-                check2 = zone_low <= candle_high <= zone_high
-                check3 = candle_low <= zone_low and candle_high >= zone_high
+                # Price Action SHORT
+                check_close = candle_close < zone_high
+                check_high = candle_high >= zone_low
+                match = check_close and check_high
                 
                 print(f"\n   Zone {i}: ${zone_low:.4f} - ${zone_high:.4f}")
-                print(f"      Low trong zone? {check1} ({zone_low:.4f} <= {candle_low:.4f} <= {zone_high:.4f})")
-                print(f"      High trong zone? {check2} ({zone_low:.4f} <= {candle_high:.4f} <= {zone_high:.4f})")
-                print(f"      Nến xuyên qua? {check3} ({candle_low:.4f} <= {zone_low:.4f} và {candle_high:.4f} >= {zone_high:.4f})")
+                print(f"      Close < zone_high? {check_close} (${candle_close:.4f} < ${zone_high:.4f})")
+                print(f"      High >= zone_low? {check_high} (${candle_high:.4f} >= ${zone_low:.4f})")
                 
-                if check1 or check2 or check3:
-                    print(f"      ✅ MATCH!")
+                if match:
+                    print(f"      ✅ PRICE ACTION MATCH!")
         
+        # Chi tiết từng Support zone
         if sr_result['supports']:
             print(f"\n4. Chi tiết kiểm tra từng Support zone:")
             for i, support in enumerate(sr_result['supports'], 1):
                 zone_low = support['low']
                 zone_high = support['high']
                 
-                check1 = zone_low <= candle_low <= zone_high
-                check2 = zone_low <= candle_high <= zone_high
-                check3 = candle_low <= zone_low and candle_high >= zone_high
+                # Price Action LONG
+                check_close = candle_close > zone_low
+                check_low = candle_low <= zone_high
+                match = check_close and check_low
                 
                 print(f"\n   Zone {i}: ${zone_low:.4f} - ${zone_high:.4f}")
-                print(f"      Low trong zone? {check1}")
-                print(f"      High trong zone? {check2}")
-                print(f"      Nến xuyên qua? {check3}")
+                print(f"      Close > zone_low? {check_close} (${candle_close:.4f} > ${zone_low:.4f})")
+                print(f"      Low <= zone_high? {check_low} (${candle_low:.4f} <= ${zone_high:.4f})")
                 
-                if check1 or check2 or check3:
-                    print(f"      ✅ MATCH!")
+                if match:
+                    print(f"      ✅ PRICE ACTION MATCH!")
+        
+        # Kiểm tra in_channel
+        if sr_result['in_channel']:
+            print(f"\n5. Kiểm tra IN_CHANNEL:")
+            ch = sr_result['in_channel']
+            zone_low = ch['low']
+            zone_high = ch['high']
+            
+            mid_price = (candle_low + candle_high) / 2
+            distance_to_low = abs(mid_price - zone_low)
+            distance_to_high = abs(mid_price - zone_high)
+            
+            print(f"   Channel: ${zone_low:.4f} - ${zone_high:.4f}")
+            print(f"   Mid Price: ${mid_price:.4f}")
+            print(f"   Distance to Low: ${distance_to_low:.4f}")
+            print(f"   Distance to High: ${distance_to_high:.4f}")
+            
+            if distance_to_low < distance_to_high:
+                print(f"   → Gần SUPPORT hơn")
+                check_close = candle_close > zone_low
+                check_low = candle_low <= zone_high
+                print(f"      Close > zone_low? {check_close}")
+                print(f"      Low <= zone_high? {check_low}")
+                if check_close and check_low:
+                    print(f"      ✅ SUPPORT PRICE ACTION MATCH!")
+            else:
+                print(f"   → Gần RESISTANCE hơn")
+                check_close = candle_close < zone_high
+                check_high = candle_high >= zone_low
+                print(f"      Close < zone_high? {check_close}")
+                print(f"      High >= zone_low? {check_high}")
+                if check_close and check_high:
+                    print(f"      ✅ RESISTANCE PRICE ACTION MATCH!")
         
         print("\n" + "="*70)
         
