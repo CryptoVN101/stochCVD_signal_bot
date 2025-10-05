@@ -35,10 +35,11 @@ STOCH_D_SMOOTH = 8       # %D Smoothing
 # ============================================
 # CẤU HÌNH CHỈ BÁO CVD
 # ============================================
-CVD_DIVERGENCE_PERIOD = 1    # Divergence Fractal Periods
-CVD_PERIOD = 16              # CVD Period
-CVD_CUMULATIVE_MODE = 'EMA'  # Cumulative Mode: 'Periodic' hoặc 'EMA'
-CVD_MARKET_TYPE = 'Crypto'   # Market Ultra Data: 'Crypto', 'Forex', 'Stock'
+CVD_DIVERGENCE_PERIOD = 2        # Divergence Fractal Periods
+CVD_PERIOD = 24                  # CVD Period
+CVD_CUMULATIVE_MODE = 'EMA'      # Cumulative Mode: 'Periodic' hoặc 'EMA'
+CVD_MARKET_TYPE = 'Crypto'       # Market Ultra Data: 'Crypto', 'Forex', 'Stock'
+CVD_MIN_SWING_DISTANCE = 5       # Khoảng cách tối thiểu giữa 2 pivot (số nến)
 
 # ============================================
 # CẤU HÌNH ĐIỀU KIỆN TÍN HIỆU
@@ -101,14 +102,29 @@ SIGNAL_EMOJI_SELL = "🔴"
 # CẤU HÌNH LOGGING
 # ============================================
 LOG_LEVEL = 'INFO'  # DEBUG, INFO, WARNING, ERROR
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'# Thêm vào cuối file config.py
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 # ============================================
-# CẤU HÌNH SUPPORT/RESISTANCE CHANNEL
+# CẤU HÌNH SUPPORT/RESISTANCE CHANNEL (H1)
 # ============================================
 SR_PIVOT_PERIOD = 10              # Chu kỳ pivot
-SR_CHANNEL_WIDTH_PERCENT = 5.0    # % độ rộng channel (giảm xuống 3-4 nếu muốn nhạy hơn)
+SR_CHANNEL_WIDTH_PERCENT = 5.0    # % độ rộng channel
 SR_LOOPBACK_PERIOD = 290          # Số nến nhìn lại
-SR_MIN_STRENGTH = 1              # Strength tối thiểu (tăng lên để lọc vùng yếu)
+SR_MIN_STRENGTH = 1               # Strength tối thiểu
 SR_MAX_CHANNELS = 6               # Số channels hiển thị
 SR_ENABLED = True                 # Bật/tắt filter S/R
+
+# ============================================
+# CẤU HÌNH S/R CHO KHUNG M15 (RIÊNG)
+# ============================================
+SR_M15_PIVOT_PERIOD = 5               # Pivot nhỏ hơn H1
+SR_M15_CHANNEL_WIDTH_PERCENT = 3.0    # Hẹp hơn H1
+SR_M15_LOOPBACK_PERIOD = 200          # Ít hơn H1
+SR_M15_MIN_STRENGTH = 1
+SR_M15_MAX_CHANNELS = 6
+
+# ============================================
+# CẤU HÌNH LOẠI TÍN HIỆU
+# ============================================
+SIGNAL_STOCH_SR_ENABLED = True    # Bật tín hiệu Stoch + S/R
+SIGNAL_STOCH_CVD_ENABLED = True   # Bật tín hiệu Stoch + CVD

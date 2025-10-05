@@ -1,6 +1,6 @@
 """
 Bot Telegram - CryptoVN 101
-Gửi tín hiệu giao dịch lên channel
+Gửi 2 loại tín hiệu lên channel với timeframe info
 """
 
 import asyncio
@@ -14,7 +14,6 @@ import config
 from database import DatabaseManager
 from signal_scanner import SignalScanner
 
-# Cấu hình logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -23,9 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    """
-    Lớp quản lý Telegram Bot
-    """
+    """Lớp quản lý Telegram Bot - hỗ trợ 2 loại tín hiệu"""
     
     def __init__(self):
         """Khởi tạo bot"""
@@ -33,14 +30,12 @@ class TelegramBot:
         self.scanner = SignalScanner()
         self.app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
         
-        # Đăng ký các lệnh
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("add", self.cmd_add))
         self.app.add_handler(CommandHandler("remove", self.cmd_remove))
         self.app.add_handler(CommandHandler("list", self.cmd_list))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         
-        # Thêm các symbol mặc định nếu chưa có
         self._init_default_symbols()
     
     def _init_default_symbols(self):
@@ -54,22 +49,22 @@ class TelegramBot:
         welcome_msg = """
 🤖 <b>Bot CryptoVN 101 - Tín hiệu StochCVD</b>
 
-Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
+Chào mừng! Bot sẽ tự động gửi 2 loại tín hiệu:
 
-<b>Các lệnh có sẵn:</b>
-/add BTCUSDT - Thêm coin vào danh sách theo dõi
-/remove BTCUSDT - Xóa coin khỏi danh sách
-/list - Xem danh sách đang theo dõi
-/help - Hướng dẫn sử dụng
+<b>📊 Type 1: Stoch + S/R</b>
+- Stochastic thỏa ngưỡng
+- Price Action tại vùng Support/Resistance
+- Kiểm tra trên cả khung M15 và H1
 
-<b>Thiết lập:</b>
-📊 CVD: Fractal=1, Period=16, Mode=EMA, Khung H1
-📈 Stochastic: K=16, Smooth=16, D=8
-📍 Support/Resistance: Filter tín hiệu tại vùng quan trọng
+<b>📈 Type 2: Stoch + CVD</b>
+- CVD báo phân kỳ trên H1
+- Stochastic thỏa ngưỡng
 
-<b>Điều kiện tín hiệu:</b>
-🟢 BUY: CVD phân kỳ tăng + Stoch H1&lt;25 &amp; M15&lt;25 + Low chạm Support
-🔴 SELL: CVD phân kỳ giảm + Stoch H1&gt;75 &amp; M15&gt;75 + High chạm Resistance
+<b>Các lệnh:</b>
+/add BTCUSDT - Thêm coin
+/remove BTCUSDT - Xóa coin
+/list - Xem danh sách
+/help - Hướng dẫn chi tiết
 """
         await update.message.reply_text(welcome_msg, parse_mode=ParseMode.HTML)
     
@@ -104,10 +99,10 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
         watchlist = self.db.get_watchlist_info()
         
         if not watchlist:
-            await update.message.reply_text("📝 Danh sách theo dõi đang trống")
+            await update.message.reply_text("📋 Danh sách theo dõi đang trống")
             return
         
-        msg = f"📝 <b>Danh sách đang theo dõi ({len(watchlist)} coin):</b>\n\n"
+        msg = f"📋 <b>Danh sách đang theo dõi ({len(watchlist)} coin):</b>\n\n"
         
         for idx, item in enumerate(watchlist, 1):
             added_time = item['added_at'].strftime('%d-%m-%Y %H:%M')
@@ -124,28 +119,24 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
 <b>1. Thêm coin theo dõi:</b>
 /add BTCUSDT
 /add BTC (tự động thêm USDT)
-/add ETH
 
 <b>2. Xóa coin:</b>
 /remove BTCUSDT
-/remove BTC
 
 <b>3. Xem danh sách:</b>
 /list
 
-<b>4. Giải thích tín hiệu:</b>
+<b>4. Loại tín hiệu:</b>
 
-🟢 <b>Tín hiệu BUY/LONG:</b>
-- CVD báo phân kỳ tăng trên H1
-- Stochastic H1 < 25 VÀ M15 < 25
-- Low của nến chạm vùng Support
-→ Tín hiệu đảo chiều tăng
+🟢 <b>Stoch + S/R:</b>
+- Stoch H1 < 25 & M15 < 25 (LONG)
+- Stoch H1 > 75 & M15 > 75 (SHORT)
+- Kiểm tra nến chạm S/R trên M15 và/hoặc H1
 
-🔴 <b>Tín hiệu SELL/SHORT:</b>
-- CVD báo phân kỳ giảm trên H1
-- Stochastic H1 > 75 VÀ M15 > 75
-- High của nến chạm vùng Resistance
-→ Tín hiệu đảo chiều giảm
+🔴 <b>Stoch + CVD:</b>
+- CVD phân kỳ trên H1
+- Stoch H1 < 25 & M15 < 25 (LONG)
+- Stoch H1 > 75 & M15 > 75 (SHORT)
 
 ⚠️ <b>Lưu ý:</b>
 - Đây chỉ là công cụ hỗ trợ
@@ -156,61 +147,38 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu giao dịch lên channel.
     
     def format_signal_message(self, signal):
         """
-        Format message tín hiệu
-        
-        Args:
-            signal: Dict chứa thông tin tín hiệu
-            
-        Returns:
-            str: Message đã format
+        Format message cho 2 loại tín hiệu với timeframe info
         """
         symbol = signal['symbol']
         signal_type = signal['signal_type']
+        signal_category = signal['signal_category']
         price = signal['price']
-        signal_time = signal['signal_time']
-        confirm_time = signal['confirm_time']
-        stoch_m15 = signal['stoch_m15']
-        stoch_h1 = signal['stoch_h1']
         
-        # Icon và text
-        if signal_type == 'BUY':
-            icon = "🟢"
-            type_text = "BUY/LONG"
+        icon = "🟢" if signal_type == 'BUY' else "🔴"
+        type_text = "BUY/LONG" if signal_type == 'BUY' else "SELL/SHORT"
+        
+        message = f"🔶 Token: {symbol} (Bybit)\n"
+        
+        if signal_category == 'STOCH_SR':
+            category_text = "Stoch + S/R"
+            sr_type = signal.get('sr_type', 'support/resistance')
+            timeframes = signal.get('timeframes', 'H1')
+            
+            # Tên tiếng Việt
+            sr_name = "hỗ trợ" if sr_type == 'support' else "kháng cự"
+            
+            message += f"{icon} Tín hiệu đảo chiều {type_text} - {category_text}\n"
+            message += f"⏰ Phản ứng với {sr_name} khung {timeframes}\n"
         else:
-            icon = "🔴"
-            type_text = "SELL/SHORT"
+            category_text = "Stoch + CVD"
+            message += f"{icon} Tín hiệu đảo chiều {type_text} - {category_text}\n"
         
-        # Format thời gian
-        signal_time_str = signal_time.strftime('%H:%M %d-%m-%Y')
-        confirm_time_str = confirm_time.strftime('%H:%M %d-%m-%Y')
+        message += f"💰 Giá xác nhận: ${price:.4f}"
         
-        # Thêm thông tin S/R nếu có
-        sr_info = ""
-        if signal.get('sr_zone'):
-            sr_zone = signal['sr_zone']
-            if sr_zone['low'] and sr_zone['high']:
-                zone_type = "Support" if sr_zone['type'] == 'support' else "Resistance"
-                sr_info = f"📍 Vùng {zone_type}: ${sr_zone['low']:.4f} - ${sr_zone['high']:.4f}\n"
-        
-        message = f"""
-🔶 Token: {symbol}
-{icon} Tín hiệu đảo chiều {type_text}
-⏰ Khung thời gian: H1
-💰 Giá xác nhận: {price:.4f}
-{sr_info}---------------------------------
-Thời gian gốc: {signal_time_str}
-Thời gian xác nhận: {confirm_time_str}
-Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
-"""
         return message.strip()
     
     async def send_signal_to_channel(self, signal):
-        """
-        Gửi tín hiệu lên channel
-        
-        Args:
-            signal: Dict chứa thông tin tín hiệu
-        """
+        """Gửi tín hiệu lên channel"""
         try:
             message = self.format_signal_message(signal)
             
@@ -219,9 +187,9 @@ Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
                 text=message
             )
             
-            logger.info(f"Đã gửi tín hiệu {signal['signal_type']} cho {signal['symbol']}")
+            category = signal['signal_category']
+            logger.info(f"Đã gửi tín hiệu {category} - {signal['signal_type']} cho {signal['symbol']}")
             
-            # Lưu vào database
             saved = self.db.save_signal(
                 signal_id=signal['signal_id'],
                 symbol=signal['symbol'],
@@ -239,14 +207,11 @@ Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
             logger.error(f"Lỗi khi gửi tín hiệu: {str(e)}")
     
     async def scan_loop(self):
-        """
-        Vòng lặp quét tín hiệu liên tục
-        """
+        """Vòng lặp quét tín hiệu liên tục"""
         logger.info("Bắt đầu quét tín hiệu...")
         
         while True:
             try:
-                # Lấy danh sách symbols
                 symbols = self.db.get_active_symbols()
                 
                 if not symbols:
@@ -256,30 +221,36 @@ Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
                 
                 logger.info(f"Quét {len(symbols)} symbols...")
                 
-                # Quét từng symbol
                 for symbol in symbols:
                     try:
-                        # Kiểm tra tín hiệu
-                        signal = self.scanner.check_signal(symbol)
+                        signals = self.scanner.check_all_signals(symbol)
                         
-                        if signal:
-                            # Kiểm tra xem đã gửi chưa bằng signal_id
+                        # Xử lý tín hiệu Stoch + S/R
+                        if signals['stoch_sr']:
+                            signal = signals['stoch_sr']
                             signal_id = signal['signal_id']
                             
                             if not self.db.check_signal_exists(signal_id):
-                                # Gửi tín hiệu
                                 await self.send_signal_to_channel(signal)
                             else:
-                                logger.info(f"Tín hiệu {signal['signal_type']} cho {symbol} đã được gửi trước đó (ID: {signal_id})")
+                                logger.info(f"Tín hiệu STOCH_SR {signal['signal_type']} cho {symbol} đã được gửi trước đó")
                         
-                        # Delay giữa các symbol để tránh rate limit
+                        # Xử lý tín hiệu Stoch + CVD
+                        if signals['stoch_cvd']:
+                            signal = signals['stoch_cvd']
+                            signal_id = signal['signal_id']
+                            
+                            if not self.db.check_signal_exists(signal_id):
+                                await self.send_signal_to_channel(signal)
+                            else:
+                                logger.info(f"Tín hiệu STOCH_CVD {signal['signal_type']} cho {symbol} đã được gửi trước đó")
+                        
                         await asyncio.sleep(2)
                         
                     except Exception as e:
                         logger.error(f"Lỗi khi quét {symbol}: {str(e)}")
                         continue
                 
-                # Chờ trước khi quét lại (mặc định 60 giây)
                 logger.info(f"Hoàn thành quét. Chờ {config.SCAN_INTERVAL} giây...")
                 await asyncio.sleep(config.SCAN_INTERVAL)
                 
@@ -291,16 +262,20 @@ Stoch (M15/H1): {stoch_m15:.2f} / {stoch_h1:.2f}
         """Khởi động bot"""
         logger.info("Khởi động bot...")
         
-        # Khởi tạo bot
         await self.app.initialize()
         await self.app.start()
-        
-        # Bắt đầu nhận lệnh
         await self.app.updater.start_polling(drop_pending_updates=True)
         
         logger.info("Bot đã sẵn sàng!")
         
-        # Bắt đầu quét tín hiệu
+        active_signals = []
+        if config.SIGNAL_STOCH_SR_ENABLED:
+            active_signals.append("Stoch+S/R")
+        if config.SIGNAL_STOCH_CVD_ENABLED:
+            active_signals.append("Stoch+CVD")
+        
+        logger.info(f"Loại tín hiệu đang bật: {', '.join(active_signals)}")
+        
         await self.scan_loop()
     
     async def stop_bot(self):

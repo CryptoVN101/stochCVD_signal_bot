@@ -12,18 +12,20 @@ class CVDIndicator:
     Lớp tính toán chỉ báo CVD và phát hiện phân kỳ (divergence)
     """
     
-    def __init__(self, divergence_period=4, cvd_period=24, cumulative_mode='EMA'):
+    def __init__(self, divergence_period=2, cvd_period=24, cumulative_mode='EMA', min_swing_distance=5):
         """
         Khởi tạo chỉ báo CVD
         
         Args:
-            divergence_period: Chu kỳ phát hiện phân kỳ (fractal period) - mặc định 4
+            divergence_period: Chu kỳ phát hiện phân kỳ (fractal period) - mặc định 2
             cvd_period: Chu kỳ tính CVD - mặc định 24
             cumulative_mode: Chế độ tích lũy 'Periodic' hoặc 'EMA' - mặc định 'EMA'
+            min_swing_distance: Khoảng cách tối thiểu giữa 2 pivot (số nến) - mặc định 5
         """
         self.divergence_period = divergence_period
         self.cvd_period = cvd_period
         self.cumulative_mode = cumulative_mode
+        self.min_swing_distance = min_swing_distance
         
     def calculate_delta(self, df):
         """
@@ -163,13 +165,16 @@ class CVDIndicator:
         last_pivot_idx = pivot_indices[-1]
         
         # Tính khoảng cách giữa 2 pivot (số nến)
-        # Nếu index là datetime, cần dùng .get_loc() để lấy vị trí số
         if isinstance(df.index, pd.DatetimeIndex):
             prev_pos = df.index.get_loc(prev_pivot_idx)
             last_pos = df.index.get_loc(last_pivot_idx)
             distance = last_pos - prev_pos
         else:
             distance = last_pivot_idx - prev_pivot_idx
+        
+        # MỚI: Kiểm tra khoảng cách tối thiểu
+        if distance < self.min_swing_distance:
+            return False, None
         
         # Kiểm tra khoảng cách không quá xa (< 30 nến)
         if distance >= 30:
@@ -239,13 +244,16 @@ class CVDIndicator:
         last_pivot_idx = pivot_indices[-1]
         
         # Tính khoảng cách giữa 2 pivot (số nến)
-        # Nếu index là datetime, cần dùng .get_loc() để lấy vị trí số
         if isinstance(df.index, pd.DatetimeIndex):
             prev_pos = df.index.get_loc(prev_pivot_idx)
             last_pos = df.index.get_loc(last_pivot_idx)
             distance = last_pos - prev_pos
         else:
             distance = last_pivot_idx - prev_pivot_idx
+        
+        # MỚI: Kiểm tra khoảng cách tối thiểu
+        if distance < self.min_swing_distance:
+            return False, None
         
         # Kiểm tra khoảng cách không quá xa (< 30 nến)
         if distance >= 30:
@@ -323,18 +331,19 @@ class CVDIndicator:
 
 
 # Hàm tiện ích để sử dụng nhanh
-def detect_cvd_divergence(df, divergence_period=4, cvd_period=24, cumulative_mode='EMA'):
+def detect_cvd_divergence(df, divergence_period=2, cvd_period=24, cumulative_mode='EMA', min_swing_distance=5):
     """
     Hàm tiện ích phát hiện phân kỳ CVD
     
     Args:
         df: DataFrame với cột ['open', 'high', 'low', 'close', 'volume']
-        divergence_period: Chu kỳ phân kỳ (mặc định 4)
+        divergence_period: Chu kỳ phân kỳ (mặc định 2)
         cvd_period: Chu kỳ CVD (mặc định 24)
         cumulative_mode: Chế độ tích lũy 'Periodic' hoặc 'EMA'
+        min_swing_distance: Khoảng cách tối thiểu giữa swings (mặc định 5)
         
     Returns:
         dict: Kết quả phân tích
     """
-    indicator = CVDIndicator(divergence_period, cvd_period, cumulative_mode)
+    indicator = CVDIndicator(divergence_period, cvd_period, cumulative_mode, min_swing_distance)
     return indicator.analyze(df)
