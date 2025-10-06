@@ -1,11 +1,11 @@
 """
-Test tín hiệu STOCH + S/R - Logic mới chính xác
-FIX: Hiển thị thời gian ĐÓNG CỬA của nến H1
+Scanner tín hiệu - Chỉ Stoch + S/R
 """
 
 import pandas as pd
 import ccxt
 import pytz
+from datetime import datetime
 from stochastic_indicator import StochasticIndicator
 from support_resistance import SupportResistanceChannel
 import config
@@ -13,164 +13,174 @@ import config
 VIETNAM_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 
 
-def fetch_data(symbol, timeframe, limit):
-    """Lấy dữ liệu từ Binance"""
-    exchange = ccxt.binance({'enableRateLimit': True})
+class SignalScanner:
+    """Lớp quét tín hiệu - CHỈ STOCH + S/R"""
     
-    if '/' not in symbol:
-        symbol = symbol[:-4] + '/' + symbol[-4:]
+    def __init__(self):
+        """Khởi tạo scanner"""
+        self.exchange = ccxt.binance({'enableRateLimit': True})
+        self.stoch = StochasticIndicator(
+            k_period=config.STOCH_K_PERIOD,
+            k_smooth=config.STOCH_K_SMOOTH,
+            d_smooth=config.STOCH_D_SMOOTH
+        )
+        # S/R cho H1
+        self.sr = SupportResistanceChannel(
+            pivot_period=config.SR_PIVOT_PERIOD,
+            channel_width_percent=config.SR_CHANNEL_WIDTH_PERCENT,
+            loopback_period=config.SR_LOOPBACK_PERIOD,
+            min_strength=config.SR_MIN_STRENGTH,
+            max_channels=config.SR_MAX_CHANNELS
+        )
+        # S/R cho M15
+        self.sr_m15 = SupportResistanceChannel(
+            pivot_period=config.SR_M15_PIVOT_PERIOD,
+            channel_width_percent=config.SR_M15_CHANNEL_WIDTH_PERCENT,
+            loopback_period=config.SR_M15_LOOPBACK_PERIOD,
+            min_strength=config.SR_M15_MIN_STRENGTH,
+            max_channels=config.SR_M15_MAX_CHANNELS
+        )
     
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-    df['timestamp'] = df['timestamp'].dt.tz_convert(VIETNAM_TZ)
-    df.set_index('timestamp', inplace=True)
-    return df
-
-
-def test_stoch_sr(symbol='ZROUSDT'):
-    """Test Stoch + S/R - Logic mới với thời gian ĐÓNG CỬA"""
-    
-    print(f"\n{'='*80}")
-    print(f"TEST TÍN HIỆU STOCH + S/R - {symbol}")
-    print(f"{'='*80}")
-    print(f"Logic mới:")
-    print(f"  LONG: %D(cam) H1<25 & M15<25, Low<=channel_high & Close>channel_low")
-    print(f"  SHORT: %K(xanh) H1>75 & M15>75, High>=channel_low & Close<channel_high")
-    
-    df_m15 = fetch_data(symbol, '15m', 500)
-    df_h1 = fetch_data(symbol, '1h', 500)
-    
-    # Stochastic
-    stoch = StochasticIndicator(
-        k_period=config.STOCH_K_PERIOD,
-        k_smooth=config.STOCH_K_SMOOTH,
-        d_smooth=config.STOCH_D_SMOOTH
-    )
-    stoch_k_m15_series, stoch_d_m15_series = stoch.calculate(df_m15)
-    stoch_k_h1_series, stoch_d_h1_series = stoch.calculate(df_h1)
-    
-    # S/R
-    sr_h1 = SupportResistanceChannel(
-        pivot_period=config.SR_PIVOT_PERIOD,
-        channel_width_percent=config.SR_CHANNEL_WIDTH_PERCENT,
-        loopback_period=config.SR_LOOPBACK_PERIOD,
-        min_strength=config.SR_MIN_STRENGTH,
-        max_channels=config.SR_MAX_CHANNELS
-    )
-    
-    sr_m15 = SupportResistanceChannel(
-        pivot_period=config.SR_M15_PIVOT_PERIOD,
-        channel_width_percent=config.SR_M15_CHANNEL_WIDTH_PERCENT,
-        loopback_period=config.SR_M15_LOOPBACK_PERIOD,
-        min_strength=config.SR_M15_MIN_STRENGTH,
-        max_channels=config.SR_M15_MAX_CHANNELS
-    )
-    
-    signals = []
-    
-    # Quét 50 nến H1 cuối - DÙNG NẾN ĐÃ ĐÓNG
-    for i in range(len(df_h1) - 50, len(df_h1) - 1):  # Bỏ nến cuối (đang chạy)
-        # Thời gian MỞ CỬA
-        candle_open_time = df_h1.index[i]
-        
-        # Thời gian ĐÓNG CỬA (cuối nến H1)
-        candle_close_time = candle_open_time + pd.Timedelta(hours=1) - pd.Timedelta(seconds=1)
-        
-        # Lấy giá trị Stoch tại index i
-        k_h1 = stoch_k_h1_series.iloc[i]
-        d_h1 = stoch_d_h1_series.iloc[i]
-        
-        # Tìm nến M15 tương ứng
-        m15_idx = df_m15.index.get_indexer([candle_open_time], method='nearest')[0]
-        k_m15 = stoch_k_m15_series.iloc[m15_idx]
-        d_m15 = stoch_d_m15_series.iloc[m15_idx]
-        
-        # Điều kiện Stoch
-        is_long = d_h1 < 25 and d_m15 < 25
-        is_short = k_h1 > 75 and k_m15 > 75
-        
-        if not (is_long or is_short):
-            continue
-        
-        # S/R - Chỉ dùng dữ liệu ĐẾN nến này
-        result_h1 = sr_h1.analyze(df_h1.iloc[:i+1])
-        result_m15 = sr_m15.analyze(df_m15.iloc[:m15_idx+1])
-        
-        timeframes = []
-        
-        # Check H1 in_channel
-        if result_h1['success'] and result_h1['in_channel']:
-            h1_low = df_h1['low'].iloc[i]
-            h1_high = df_h1['high'].iloc[i]
-            h1_close = df_h1['close'].iloc[i]
+    def fetch_data(self, symbol, timeframe, limit=100):
+        """Lấy dữ liệu từ Binance"""
+        try:
+            if '/' not in symbol:
+                symbol = symbol[:-4] + '/' + symbol[-4:]
             
-            ch = result_h1['in_channel']
+            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            if is_long:
-                if h1_low <= ch['high'] and h1_close > ch['low']:
-                    timeframes.append('H1')
-            elif is_short:
-                if h1_high >= ch['low'] and h1_close < ch['high']:
-                    timeframes.append('H1')
-        
-        # Check 4 nến M15 in_channel
-        if result_m15['success'] and result_m15['in_channel']:
-            # Lấy 4 nến M15 tương ứng với nến H1 này
-            last_4_m15 = df_m15.iloc[m15_idx-3:m15_idx+1]
-            ch = result_m15['in_channel']
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            df['timestamp'] = df['timestamp'].dt.tz_convert(VIETNAM_TZ)
+            df.set_index('timestamp', inplace=True)
             
-            m15_touched = False
-            for j in range(len(last_4_m15)):
-                m15_low = last_4_m15['low'].iloc[j]
-                m15_high = last_4_m15['high'].iloc[j]
-                m15_close = last_4_m15['close'].iloc[j]
+            return df
+            
+        except Exception as e:
+            print(f"Lỗi khi lấy dữ liệu {symbol}: {str(e)}")
+            return None
+    
+    def check_signal(self, symbol):
+        """Kiểm tra tín hiệu Stoch + S/R"""
+        try:
+            df_m15 = self.fetch_data(symbol, '15m', limit=300)
+            df_h1 = self.fetch_data(symbol, '1h', limit=500)
+            
+            if df_m15 is None or df_h1 is None:
+                return None
+            
+            # Tính Stochastic - LẤY CẢ %K VÀ %D
+            stoch_k_m15, stoch_d_m15 = self.stoch.calculate(df_m15)
+            stoch_k_h1, stoch_d_h1 = self.stoch.calculate(df_h1)
+            
+            return self._check_signal_stoch_sr(
+                symbol, df_m15, df_h1, 
+                stoch_k_m15, stoch_d_m15, 
+                stoch_k_h1, stoch_d_h1
+            )
+            
+        except Exception as e:
+            print(f"Lỗi khi kiểm tra tín hiệu {symbol}: {str(e)}")
+            return None
+    
+    def _check_signal_stoch_sr(self, symbol, df_m15, df_h1, 
+                                stoch_k_m15, stoch_d_m15, 
+                                stoch_k_h1, stoch_d_h1):
+        """Signal: Stoch + S/R - LOGIC MỚI"""
+        try:
+            # Lấy giá trị Stoch hiện tại
+            stoch_d_h1_value = stoch_d_h1.iloc[-1]   # %D H1 (cam)
+            stoch_d_m15_value = stoch_d_m15.iloc[-1]  # %D M15 (cam)
+            stoch_k_h1_value = stoch_k_h1.iloc[-1]   # %K H1 (xanh)
+            stoch_k_m15_value = stoch_k_m15.iloc[-1]  # %K M15 (xanh)
+            
+            signal_time = df_h1.index[-1]
+            candle_close = df_h1['close'].iloc[-1]
+            
+            # Kiểm tra điều kiện Stoch
+            # LONG: %D < 25 (dây cam)
+            is_long = stoch_d_h1_value < 25 and stoch_d_m15_value < 25
+            
+            # SHORT: %K > 75 (dây xanh)
+            is_short = stoch_k_h1_value > 75 and stoch_k_m15_value > 75
+            
+            if not (is_long or is_short):
+                return None
+            
+            # Tính S/R
+            sr_h1 = self.sr.analyze(df_h1)
+            sr_m15 = self.sr_m15.analyze(df_m15)
+            
+            timeframes_touched = []
+            
+            # Check H1 in_channel
+            if sr_h1['success'] and sr_h1['in_channel']:
+                h1_low = df_h1['low'].iloc[-1]
+                h1_high = df_h1['high'].iloc[-1]
+                h1_close = df_h1['close'].iloc[-1]
+                
+                channel = sr_h1['in_channel']
+                channel_low = channel['low']
+                channel_high = channel['high']
                 
                 if is_long:
-                    if m15_low <= ch['high'] and m15_close > ch['low']:
-                        m15_touched = True
-                        break
+                    # LONG: Low <= channel_high && Close > channel_low
+                    if h1_low <= channel_high and h1_close > channel_low:
+                        timeframes_touched.append('H1')
+                
                 elif is_short:
-                    if m15_high >= ch['low'] and m15_close < ch['high']:
-                        m15_touched = True
-                        break
+                    # SHORT: High >= channel_low && Close < channel_high
+                    if h1_high >= channel_low and h1_close < channel_high:
+                        timeframes_touched.append('H1')
             
-            if m15_touched:
-                timeframes.insert(0, 'M15')
-        
-        if timeframes:
-            signals.append({
-                'open_time': candle_open_time,
-                'close_time': candle_close_time,  # ← Thời gian ĐÓNG CỬA
-                'type': 'MUA' if is_long else 'BÁN',
-                'price': df_h1['close'].iloc[i],
-                'stoch_k_h1': k_h1,
-                'stoch_d_h1': d_h1,
-                'stoch_k_m15': k_m15,
-                'stoch_d_m15': d_m15,
-                'timeframes': ' & '.join(timeframes),
-                'sr_type': 'hỗ trợ' if is_long else 'kháng cự'
-            })
-    
-    print(f"\nKẾT QUẢ: {len(signals)} tín hiệu")
-    
-    if signals:
-        print(f"{'='*80}")
-        for i, sig in enumerate(signals, 1):
-            icon = "🟢" if sig['type'] == 'MUA' else "🔴"
+            # Check 4 nến M15
+            if sr_m15['success'] and sr_m15['in_channel']:
+                last_4_m15 = df_m15.iloc[-4:]
+                
+                channel = sr_m15['in_channel']
+                channel_low = channel['low']
+                channel_high = channel['high']
+                
+                m15_touched = False
+                for i in range(len(last_4_m15)):
+                    m15_low = last_4_m15['low'].iloc[i]
+                    m15_high = last_4_m15['high'].iloc[i]
+                    m15_close = last_4_m15['close'].iloc[i]
+                    
+                    if is_long:
+                        if m15_low <= channel_high and m15_close > channel_low:
+                            m15_touched = True
+                            break
+                    
+                    elif is_short:
+                        if m15_high >= channel_low and m15_close < channel_high:
+                            m15_touched = True
+                            break
+                
+                if m15_touched:
+                    timeframes_touched.insert(0, 'M15')
             
-            print(f"\n{i}. {icon} {sig['type']}")
-            print(f"   Thời gian mở: {sig['open_time'].strftime('%H:%M %d-%m-%Y')}")
-            print(f"   Thời gian đóng: {sig['close_time'].strftime('%H:%M:%S %d-%m-%Y')}")
-            print(f"   Giá: ${sig['price']:.4f}")
-            print(f"   Stoch %K H1/M15: {sig['stoch_k_h1']:.2f} / {sig['stoch_k_m15']:.2f}")
-            print(f"   Stoch %D H1/M15: {sig['stoch_d_h1']:.2f} / {sig['stoch_d_m15']:.2f}")
-            print(f"   Chạm {sig['sr_type']}: {sig['timeframes']}")
-    else:
-        print(f"\nKhông có tín hiệu")
-    
-    print(f"\n{'='*80}\n")
-
-
-if __name__ == '__main__':
-    test_stoch_sr('LDOUSDT')
+            # Tạo signal
+            if timeframes_touched:
+                return {
+                    'symbol': symbol,
+                    'signal_type': 'BUY' if is_long else 'SELL',
+                    'price': candle_close,
+                    'signal_time': signal_time,
+                    'confirm_time': datetime.now(VIETNAM_TZ),
+                    'stoch_k_m15': stoch_k_m15_value,
+                    'stoch_d_m15': stoch_d_m15_value,
+                    'stoch_k_h1': stoch_k_h1_value,
+                    'stoch_d_h1': stoch_d_h1_value,
+                    'signal_id': f"{symbol}_{signal_time.strftime('%Y%m%d%H%M')}_{'BUY' if is_long else 'SELL'}_SR",
+                    'timeframes': ' & '.join(timeframes_touched),
+                    'sr_type': 'support' if is_long else 'resistance'
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"Lỗi _check_signal_stoch_sr: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
