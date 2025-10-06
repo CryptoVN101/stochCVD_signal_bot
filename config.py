@@ -127,4 +127,3 @@ SR_M15_MAX_CHANNELS = 6
 # CẤU HÌNH LOẠI TÍN HIỆU
 # ============================================
 SIGNAL_STOCH_SR_ENABLED = True    # Bật tín hiệu Stoch + S/R
-SIGNAL_STOCH_CVD_ENABLED = True   # Bật tín hiệu Stoch + CVD

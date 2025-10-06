@@ -1,17 +1,18 @@
 """
 Support and Resistance Channel Indicator
-Tái tạo từ TradingView Pine Script
+Chuyển từ Pine Script - CHÍNH XÁC TUYỆT ĐỐI
 """
 
 import pandas as pd
 import numpy as np
+from scipy.signal import argrelextrema
 from typing import List, Dict, Tuple, Optional
 
 
 class SupportResistanceChannel:
     """
     Lớp tính toán Support/Resistance Channels
-    Dựa trên thuật toán từ TradingView
+    Logic giống y hệt Pine Script
     """
     
     def __init__(
@@ -20,414 +21,178 @@ class SupportResistanceChannel:
         channel_width_percent: float = 5.0,
         loopback_period: int = 290,
         min_strength: int = 1,
-        max_channels: int = 6
+        max_channels: int = 6,
+        source: str = 'High/Low'
     ):
-        """
-        Khởi tạo S/R Channel calculator
-        
-        Args:
-            pivot_period: Chu kỳ pivot (mặc định 10)
-            channel_width_percent: % độ rộng channel tối đa (mặc định 5%)
-            loopback_period: Số nến nhìn lại để tính (mặc định 290)
-            min_strength: Strength tối thiểu (mặc định 1)
-            max_channels: Số channels tối đa hiển thị (mặc định 6)
-        """
-        self.pivot_period = pivot_period
-        self.channel_width_percent = channel_width_percent
-        self.loopback_period = loopback_period
+        """Khởi tạo S/R Channel calculator"""
+        self.prd = pivot_period
+        self.channel_width_pct = channel_width_percent
+        self.loopback = loopback_period
         self.min_strength = min_strength
-        self.max_channels = max_channels
+        self.max_num_sr = max_channels
+        self.source = source
     
-    def find_pivot_high(self, high_series: pd.Series) -> pd.Series:
+    def find_pivots(self, df: pd.DataFrame) -> List[Tuple[int, float, str]]:
         """
-        Tìm Pivot High
-        
-        Args:
-            high_series: Series giá cao
-            
-        Returns:
-            Series boolean, True tại vị trí pivot high
+        Tìm pivot points - GIỐNG PINE SCRIPT
         """
-        n = self.pivot_period
-        pivot_high = pd.Series(False, index=high_series.index)
+        if self.source == 'High/Low':
+            src1 = df['high'].values
+            src2 = df['low'].values
+        else:
+            src1 = np.maximum(df['close'].values, df['open'].values)
+            src2 = np.minimum(df['close'].values, df['open'].values)
         
-        for i in range(n, len(high_series) - n):
-            is_pivot = True
-            center = high_series.iloc[i]
-            
-            # Kiểm tra left bars
-            for j in range(1, n + 1):
-                if high_series.iloc[i - j] >= center:
-                    is_pivot = False
-                    break
-            
-            if not is_pivot:
-                continue
-            
-            # Kiểm tra right bars
-            for j in range(1, n + 1):
-                if high_series.iloc[i + j] >= center:
-                    is_pivot = False
-                    break
-            
-            pivot_high.iloc[i] = is_pivot
+        # Tìm pivot highs
+        ph_indices = argrelextrema(src1, np.greater_equal, order=self.prd)[0]
+        pivot_highs = [(i, src1[i], 'H') for i in ph_indices]
         
-        return pivot_high
+        # Tìm pivot lows
+        pl_indices = argrelextrema(src2, np.less_equal, order=self.prd)[0]
+        pivot_lows = [(i, src2[i], 'L') for i in pl_indices]
+        
+        # Kết hợp và sắp xếp theo thời gian giảm dần
+        all_pivots = pivot_highs + pivot_lows
+        all_pivots.sort(key=lambda x: x[0], reverse=True)
+        
+        return all_pivots
     
-    def find_pivot_low(self, low_series: pd.Series) -> pd.Series:
-        """
-        Tìm Pivot Low
-        
-        Args:
-            low_series: Series giá thấp
-            
-        Returns:
-            Series boolean, True tại vị trí pivot low
-        """
-        n = self.pivot_period
-        pivot_low = pd.Series(False, index=low_series.index)
-        
-        for i in range(n, len(low_series) - n):
-            is_pivot = True
-            center = low_series.iloc[i]
-            
-            # Kiểm tra left bars
-            for j in range(1, n + 1):
-                if low_series.iloc[i - j] <= center:
-                    is_pivot = False
-                    break
-            
-            if not is_pivot:
-                continue
-            
-            # Kiểm tra right bars
-            for j in range(1, n + 1):
-                if low_series.iloc[i + j] <= center:
-                    is_pivot = False
-                    break
-            
-            pivot_low.iloc[i] = is_pivot
-        
-        return pivot_low
-    
-    def calculate_channel_width(self, df: pd.DataFrame) -> float:
-        """
-        Tính độ rộng channel động
-        
-        Args:
-            df: DataFrame với cột high, low
-            
-        Returns:
-            float: Độ rộng channel tối đa
-        """
-        # Lấy 300 nến gần nhất (hoặc ít hơn nếu không đủ)
-        lookback = min(300, len(df))
-        recent_data = df.iloc[-lookback:]
-        
-        highest = recent_data['high'].max()
-        lowest = recent_data['low'].min()
-        
-        channel_width = (highest - lowest) * self.channel_width_percent / 100
-        
-        return channel_width
-    
-    def get_sr_values(
+    def get_sr_vals(
         self,
-        pivot_values: List[float],
-        pivot_index: int,
-        channel_width: float
+        pivots: List[Tuple[int, float, str]],
+        ind: int,
+        cwidth: float
     ) -> Tuple[float, float, int]:
         """
-        Tính giá trị channel cho 1 pivot point
-        
-        Args:
-            pivot_values: Danh sách tất cả pivot values
-            pivot_index: Index của pivot đang xét
-            channel_width: Độ rộng channel tối đa
-            
-        Returns:
-            Tuple (hi, lo, strength)
+        Tìm SR channel cho một pivot point - LOGIC PINE SCRIPT
         """
-        lo = pivot_values[pivot_index]
-        hi = pivot_values[pivot_index]
-        num_pivots = 0
+        lo = pivots[ind][1]
+        hi = lo
+        numpp = 0
         
-        # Tìm các pivot khác nằm trong channel
-        for other_pivot in pivot_values:
-            # Tính width nếu thêm pivot này vào
-            if other_pivot <= hi:
-                potential_width = hi - other_pivot
-            else:
-                potential_width = other_pivot - lo
+        for y in range(len(pivots)):
+            cpp = pivots[y][1]
+            wdth = hi - cpp if cpp <= hi else cpp - lo
             
-            # Nếu vẫn nằm trong channel width cho phép
-            if potential_width <= channel_width:
-                if other_pivot <= hi:
-                    lo = min(lo, other_pivot)
+            if wdth <= cwidth:
+                if cpp <= hi:
+                    lo = min(lo, cpp)
                 else:
-                    hi = max(hi, other_pivot)
-                
-                num_pivots += 20  # Mỗi pivot = 20 điểm
+                    hi = max(hi, cpp)
+                numpp += 20
         
-        return hi, lo, num_pivots
-    
-    def calculate_strength_from_bars(
-        self,
-        df: pd.DataFrame,
-        channel_high: float,
-        channel_low: float,
-        loopback: int
-    ) -> int:
-        """
-        Tính strength dựa trên số lần price test channel
-        
-        Args:
-            df: DataFrame với high, low
-            channel_high: Đỉnh channel
-            channel_low: Đáy channel
-            loopback: Số nến nhìn lại
-            
-        Returns:
-            int: Strength score
-        """
-        strength = 0
-        recent_data = df.iloc[-loopback:]
-        
-        for i in range(len(recent_data)):
-            bar_high = recent_data['high'].iloc[i]
-            bar_low = recent_data['low'].iloc[i]
-            
-            # Kiểm tra high có chạm channel không
-            if bar_high <= channel_high and bar_high >= channel_low:
-                strength += 1
-            
-            # Kiểm tra low có chạm channel không
-            if bar_low <= channel_high and bar_low >= channel_low:
-                strength += 1
-        
-        return strength
+        return hi, lo, numpp
     
     def analyze(self, df: pd.DataFrame) -> Dict:
         """
         Phân tích và tìm Support/Resistance channels
-        
-        Args:
-            df: DataFrame với cột high, low, close
-            
-        Returns:
-            Dict chứa thông tin channels
+        LOGIC HOÀN TOÀN GIỐNG PINE SCRIPT
         """
-        if len(df) < self.loopback_period:
+        if len(df) < self.loopback:
             return {
                 'success': False,
-                'message': f'Không đủ dữ liệu (cần ít nhất {self.loopback_period} nến)'
+                'message': f'Không đủ dữ liệu (cần ít nhất {self.loopback} nến)'
             }
         
-        # Tính channel width động
-        channel_width = self.calculate_channel_width(df)
+        current_idx = len(df) - 1
+        current_price = df.iloc[-1]['close']
         
-        # Tìm pivot points trong loopback period
-        recent_df = df.iloc[-self.loopback_period:]
-        pivot_high_mask = self.find_pivot_high(recent_df['high'])
-        pivot_low_mask = self.find_pivot_low(recent_df['low'])
+        # Tìm pivots
+        pivots = self.find_pivots(df)
         
-        # Lấy giá trị pivot
-        pivot_values = []
+        # Lọc pivots trong loopback period
+        pivots = [p for p in pivots if current_idx - p[0] <= self.loopback]
         
-        for i in range(len(recent_df)):
-            if pivot_high_mask.iloc[i]:
-                pivot_values.append(recent_df['high'].iloc[i])
-            elif pivot_low_mask.iloc[i]:
-                pivot_values.append(recent_df['low'].iloc[i])
-        
-        if len(pivot_values) < 2:
+        if len(pivots) < 2:
             return {
                 'success': False,
                 'message': 'Không đủ pivot points'
             }
         
-        # Tạo channels cho mỗi pivot
+        # Tính channel width tối đa
+        prdhighest = df['high'].tail(300).max()
+        prdlowest = df['low'].tail(300).min()
+        cwidth = (prdhighest - prdlowest) * self.channel_width_pct / 100
+        
+        # Tính SR levels và strengths
+        supres = []
+        for x in range(len(pivots)):
+            hi, lo, strength = self.get_sr_vals(pivots, x, cwidth)
+            
+            # Thêm strength từ việc giá chạm vào channel
+            s = 0
+            for y in range(min(self.loopback, len(df))):
+                idx = len(df) - 1 - y
+                if idx >= 0:
+                    bar_high = df.iloc[idx]['high']
+                    bar_low = df.iloc[idx]['low']
+
+                    if (bar_high <= hi and bar_high >= lo) or \
+                        (bar_low <= hi and bar_low >= lo):
+                        s += 1
+            
+            strength += s
+            supres.append({'strength': strength, 'high': hi, 'low': lo})
+        
+        # Sắp xếp theo strength và lọc overlap
+        supres.sort(key=lambda x: x['strength'], reverse=True)
+        
         channels = []
-        
-        for idx in range(len(pivot_values)):
-            hi, lo, base_strength = self.get_sr_values(
-                pivot_values,
-                idx,
-                channel_width
-            )
-            
-            # Tính thêm strength từ bars
-            bar_strength = self.calculate_strength_from_bars(
-                recent_df,
-                hi,
-                lo,
-                self.loopback_period
-            )
-            
-            total_strength = base_strength + bar_strength
-            
-            if total_strength >= self.min_strength * 20:
-                channels.append({
-                    'high': hi,
-                    'low': lo,
-                    'strength': total_strength
-                })
-        
-        # Loại bỏ channels trùng lặp
-        unique_channels = []
-        seen_positions = set()
-        
-        for channel in channels:
-            # Tạo key duy nhất cho channel (làm tròn đến 4 chữ số)
-            key = (round(channel['low'], 4), round(channel['high'], 4))
-            
-            if key in seen_positions:
-                # Tìm channel đã tồn tại
-                for idx, existing in enumerate(unique_channels):
-                    existing_key = (round(existing['low'], 4), round(existing['high'], 4))
-                    if existing_key == key:
-                        # Giữ channel có strength cao hơn
-                        if channel['strength'] > existing['strength']:
-                            unique_channels[idx] = channel
+        for sr in supres:
+            if sr['strength'] >= self.min_strength * 20:
+                # Kiểm tra overlap với channels đã có
+                is_overlap = False
+                for ch in channels:
+                    if (sr['high'] <= ch['high'] and sr['high'] >= ch['low']) or \
+                       (sr['low'] <= ch['high'] and sr['low'] >= ch['low']):
+                        is_overlap = True
                         break
-            else:
-                seen_positions.add(key)
-                unique_channels.append(channel)
+                
+                if not is_overlap:
+                    channels.append(sr)
+                    
+                if len(channels) >= self.max_num_sr:
+                    break
         
-        # Sắp xếp theo strength
-        sorted_channels = sorted(
-            unique_channels,
-            key=lambda x: x['strength'],
-            reverse=True
-        )
-        
-        # Giữ top channels
-        top_channels = sorted_channels[:self.max_channels]
-        
-        # Phân loại Support/Resistance (ĐÃ SỬA - LOGIC MỚI)
-        current_price = df['close'].iloc[-1]
+        # Phân loại Support/Resistance và tìm in_channel
         supports = []
         resistances = []
         in_channel = None
         
-        # Tolerance tuyệt đối rất nhỏ để xử lý giá sát vùng
-        price_tolerance = 0.0001
-        
-        for channel in top_channels:
-            mid_channel = (channel['low'] + channel['high']) / 2
+        for ch in channels:
+            ch_low = ch['low']
+            ch_high = ch['high']
+            ch_mid = (ch_low + ch_high) / 2
             
-            # Kiểm tra giá có nằm trong hoặc rất gần zone
-            is_near_or_in_zone = (
-                abs(channel['high'] - current_price) < price_tolerance or
-                abs(channel['low'] - current_price) < price_tolerance or
-                (channel['low'] <= current_price <= channel['high'])
-            )
-            
-            if is_near_or_in_zone:
-                # Giá nằm trong hoặc rất gần zone
-                # Xác định dựa trên vị trí so với mid
-                if current_price < mid_channel:
-                    # Giá dưới trung điểm → zone này là Resistance phía trên
-                    resistances.append(channel)
-                else:
-                    # Giá trên trung điểm → zone này là Support phía dưới
-                    supports.append(channel)
-                
-                # Đánh dấu in_channel cho tracking
+            # Kiểm tra giá có nằm trong channel không
+            if ch_low <= current_price <= ch_high:
+                # PRICE IN CHANNEL
                 if in_channel is None:
-                    in_channel = channel
+                    in_channel = ch
+                
+                # Xác định channel này là support hay resistance
+                if current_price < ch_mid:
+                    resistances.append(ch)
+                else:
+                    supports.append(ch)
             
-            elif channel['high'] < current_price:
-                # Zone hoàn toàn dưới giá → Support
-                supports.append(channel)
+            elif ch_high < current_price:
+                # Channel dưới giá → Support
+                supports.append(ch)
             
-            elif channel['low'] > current_price:
-                # Zone hoàn toàn trên giá → Resistance
-                resistances.append(channel)
+            elif ch_low > current_price:
+                # Channel trên giá → Resistance
+                resistances.append(ch)
         
         return {
             'success': True,
             'supports': supports,
             'resistances': resistances,
             'in_channel': in_channel,
-            'all_channels': top_channels,
+            'all_channels': channels,
             'current_price': current_price,
-            'channel_width': channel_width
+            'channel_width': cwidth
         }
-    
-    def is_price_in_support(self, df: pd.DataFrame) -> bool:
-        """
-        Kiểm tra giá có nằm trong vùng support không
-        
-        Args:
-            df: DataFrame
-            
-        Returns:
-            bool: True nếu trong support zone
-        """
-        result = self.analyze(df)
-        
-        if not result['success']:
-            return False
-        
-        # Kiểm tra có trong channel nào đó không
-        if result['in_channel']:
-            # Kiểm tra xem channel này gần support hay resistance hơn
-            current_price = result['current_price']
-            channel = result['in_channel']
-            
-            # Nếu giá gần đáy channel hơn → coi như support
-            distance_to_low = abs(current_price - channel['low'])
-            distance_to_high = abs(current_price - channel['high'])
-            
-            return distance_to_low < distance_to_high
-        
-        # Kiểm tra có support gần không (trong vòng 1% giá)
-        current_price = result['current_price']
-        tolerance = current_price * 0.01
-        
-        for support in result['supports']:
-            if abs(current_price - support['high']) < tolerance:
-                return True
-        
-        return False
-    
-    def is_price_in_resistance(self, df: pd.DataFrame) -> bool:
-        """
-        Kiểm tra giá có nằm trong vùng resistance không
-        
-        Args:
-            df: DataFrame
-            
-        Returns:
-            bool: True nếu trong resistance zone
-        """
-        result = self.analyze(df)
-        
-        if not result['success']:
-            return False
-        
-        # Kiểm tra có trong channel nào đó không
-        if result['in_channel']:
-            # Kiểm tra xem channel này gần support hay resistance hơn
-            current_price = result['current_price']
-            channel = result['in_channel']
-            
-            # Nếu giá gần đỉnh channel hơn → coi như resistance
-            distance_to_low = abs(current_price - channel['low'])
-            distance_to_high = abs(current_price - channel['high'])
-            
-            return distance_to_high < distance_to_low
-        
-        # Kiểm tra có resistance gần không (trong vòng 1% giá)
-        current_price = result['current_price']
-        tolerance = current_price * 0.01
-        
-        for resistance in result['resistances']:
-            if abs(current_price - resistance['low']) < tolerance:
-                return True
-        
-        return False
 
 
 def calculate_support_resistance(
@@ -436,18 +201,7 @@ def calculate_support_resistance(
     channel_width_percent: float = 5.0,
     loopback_period: int = 290
 ) -> Dict:
-    """
-    Hàm tiện ích tính S/R
-    
-    Args:
-        df: DataFrame với high, low, close
-        pivot_period: Chu kỳ pivot
-        channel_width_percent: % độ rộng channel
-        loopback_period: Số nến nhìn lại
-        
-    Returns:
-        Dict kết quả
-    """
+    """Hàm tiện ích tính S/R"""
     sr = SupportResistanceChannel(
         pivot_period=pivot_period,
         channel_width_percent=channel_width_percent,

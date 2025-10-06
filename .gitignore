@@ -37,11 +37,7 @@ wheels/
 .DS_Store
 
 # Test files (không push lên GitHub nhưng giữ local)
-test_cvd.py
-test_signals.py
-simple_test.py
-backtest_sr.py
-test_sr.py
+
 
 # Database local
 *.db
