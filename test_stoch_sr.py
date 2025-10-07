@@ -164,4 +164,4 @@ def test_stoch_sr(symbol='ZROUSDT'):
 
 
 if __name__ == '__main__':
-    test_stoch_sr('ZROUSDT')
+    test_stoch_sr('BEAMXUSDT')

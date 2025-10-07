@@ -1,6 +1,6 @@
 """
 Support and Resistance Channel Indicator
-Chuyển từ Pine Script - CHÍNH XÁC TUYỆT ĐỐI
+Chuyển từ Pine Script - FIX LOGIC PHÂN LOẠI
 """
 
 import pandas as pd
@@ -86,7 +86,7 @@ class SupportResistanceChannel:
     def analyze(self, df: pd.DataFrame) -> Dict:
         """
         Phân tích và tìm Support/Resistance channels
-        LOGIC HOÀN TOÀN GIỐNG PINE SCRIPT
+        FIX: Phân loại in_channel ĐÚNG
         """
         if len(df) < self.loopback:
             return {
@@ -154,7 +154,7 @@ class SupportResistanceChannel:
                 if len(channels) >= self.max_num_sr:
                     break
         
-        # Phân loại Support/Resistance và tìm in_channel
+        # FIX: Phân loại Support/Resistance ĐÚNG
         supports = []
         resistances = []
         in_channel = None
@@ -166,15 +166,11 @@ class SupportResistanceChannel:
             
             # Kiểm tra giá có nằm trong channel không
             if ch_low <= current_price <= ch_high:
-                # PRICE IN CHANNEL
+                # PRICE IN CHANNEL - CHỈ GÁN in_channel, KHÔNG THÊM VÀO supports/resistances
                 if in_channel is None:
                     in_channel = ch
                 
-                # Xác định channel này là support hay resistance
-                if current_price < ch_mid:
-                    resistances.append(ch)
-                else:
-                    supports.append(ch)
+                # KHÔNG làm gì thêm ở đây - để signal_scanner tự phân loại
             
             elif ch_high < current_price:
                 # Channel dưới giá → Support

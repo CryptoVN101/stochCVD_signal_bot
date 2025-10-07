@@ -1,6 +1,6 @@
 """
 Bot Telegram - CryptoVN 101
-Chỉ gửi tín hiệu khi nến đóng
+CHỈ BÁO TÍN HIỆU ĐÚNG TIMEFRAME KHI NẾN ĐÓNG
 """
 
 import asyncio
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    """Lớp quản lý Telegram Bot - CHỈ QUÉT KHI NẾN ĐÓNG"""
+    """Lớp quản lý Telegram Bot - BÁO TÍN HIỆU ĐÚNG TIMEFRAME"""
     
     def __init__(self):
         """Khởi tạo bot"""
@@ -53,7 +53,7 @@ class TelegramBot:
         Kiểm tra xem có nên quét không (khi nến M15 hoặc H1 vừa đóng)
         
         Returns:
-            tuple: (should_scan, timeframe) - ('m15', 'h1', hoặc None)
+            tuple: (should_scan, timeframe) - ('m15', 'h1', 'both', hoặc None)
         """
         now = datetime.now(config.TIMEZONE)
         
@@ -65,12 +65,13 @@ class TelegramBot:
             # Nến H1 vừa đóng
             if self.last_scanned_h1 != current_minute:
                 self.last_scanned_h1 = current_minute
-                logger.info(f"✓ Nến H1 vừa đóng: {current_minute.strftime('%H:%M %d-%m-%Y')}")
-                return True, 'h1'
+                self.last_scanned_m15 = current_minute  # M15 cũng đóng lúc :00
+                logger.info(f"✓ Nến H1 & M15 vừa đóng: {current_minute.strftime('%H:%M %d-%m-%Y')}")
+                return True, 'both'
         
-        # Kiểm tra nến M15 (đóng vào phút :00, :15, :30, :45)
-        if current_minute.minute % 15 == 0:
-            # Nến M15 vừa đóng
+        # Kiểm tra nến M15 (đóng vào phút :15, :30, :45)
+        elif current_minute.minute % 15 == 0:
+            # Nến M15 vừa đóng (không phải :00)
             if self.last_scanned_m15 != current_minute:
                 self.last_scanned_m15 = current_minute
                 logger.info(f"✓ Nến M15 vừa đóng: {current_minute.strftime('%H:%M %d-%m-%Y')}")
@@ -221,9 +222,41 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         except Exception as e:
             logger.error(f"Lỗi khi gửi tín hiệu: {str(e)}")
     
+    def filter_signal_by_timeframe(self, signal, scan_timeframe):
+        """
+        Lọc tín hiệu theo timeframe đang quét
+        
+        Args:
+            signal: Tín hiệu từ scanner
+            scan_timeframe: 'm15', 'h1', hoặc 'both'
+            
+        Returns:
+            bool: True nếu được phép gửi, False nếu bỏ qua
+        """
+        if not signal:
+            return False
+        
+        timeframes = signal.get('timeframes', '')
+        
+        # Nếu đang quét H1 (cả H1 và M15 đóng cùng lúc)
+        if scan_timeframe == 'both':
+            # Gửi tất cả tín hiệu (cả M15 only, H1 only, và M15 & H1)
+            return True
+        
+        # Nếu đang quét M15 (chỉ M15 đóng, H1 chưa đóng)
+        elif scan_timeframe == 'm15':
+            # CHỈ gửi tín hiệu M15 only (không có H1)
+            # Nếu có H1 thì đợi đến khi H1 đóng
+            if 'H1' in timeframes:
+                logger.debug(f"Bỏ qua tín hiệu {signal['symbol']} (có H1, đợi đến giờ :00)")
+                return False
+            return True
+        
+        return False
+    
     async def scan_loop(self):
-        """Vòng lặp quét tín hiệu - CHỈ QUÉT KHI NẾN ĐÓNG"""
-        logger.info("Bắt đầu vòng lặp quét tín hiệu (chỉ quét khi nến đóng)...")
+        """Vòng lặp quét tín hiệu - BÁO ĐÚNG TIMEFRAME"""
+        logger.info("Bắt đầu vòng lặp quét tín hiệu (báo đúng timeframe khi nến đóng)...")
         
         while True:
             try:
@@ -253,6 +286,10 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
                 for symbol in symbols:
                     try:
                         signal = self.scanner.check_signal(symbol)
+                        
+                        # Lọc tín hiệu theo timeframe
+                        if not self.filter_signal_by_timeframe(signal, timeframe):
+                            continue
                         
                         if signal:
                             signal_id = signal['signal_id']
@@ -288,7 +325,7 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
         
-        logger.info("Bot đã sẵn sàng! Chỉ quét khi nến M15/H1 đóng")
+        logger.info("Bot đã sẵn sàng! Chỉ báo tín hiệu đúng timeframe khi nến đóng")
         
         await self.scan_loop()
     

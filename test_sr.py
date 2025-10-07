@@ -190,4 +190,4 @@ def test_sr(symbol='ZROUSDT'):
 
 
 if __name__ == '__main__':
-    test_sr('ZROUSDT')
+    test_sr('BEAMXUSDT')
