@@ -1,5 +1,5 @@
 """
-Test chỉ báo S/R - Sát logic bot live
+Test chỉ báo S/R - Đúng logic support_resistance.py mới
 """
 
 import pandas as pd
@@ -26,12 +26,16 @@ def fetch_data(symbol, timeframe, limit):
     return df
 
 
-def test_sr(symbol='ZROUSDT'):
-    """Test S/R - Logic bot live"""
+def test_sr(symbol='PENDLEUSDT'):
+    """Test S/R - Logic mới (in_channel không nằm trong supports/resistances)"""
     
     print(f"\n{'='*80}")
     print(f"TEST CHI BAO S/R - {symbol}")
     print(f"{'='*80}")
+    print(f"Logic moi:")
+    print(f"  - in_channel: Gia DANG NAM TRONG channel")
+    print(f"  - supports: Cac channel DUOI gia (khong bao gom in_channel)")
+    print(f"  - resistances: Cac channel TREN gia (khong bao gom in_channel)")
     
     df_m15 = fetch_data(symbol, '15m', 500)
     df_h1 = fetch_data(symbol, '1h', 500)
@@ -57,137 +61,140 @@ def test_sr(symbol='ZROUSDT'):
     result_m15 = sr_m15.analyze(df_m15)
     
     # Hiển thị H1
-    print(f"\nKHUNG H1")
-    print("-" * 80)
+    print(f"\n{'='*80}")
+    print(f"KHUNG H1")
+    print(f"{'='*80}")
     
     if not result_h1['success']:
         print(f"Loi: {result_h1['message']}")
     else:
         current_price = result_h1['current_price']
-        print(f"Gia hien tai: ${current_price:.4f}")
+        print(f"\nGia hien tai: ${current_price:.4f}")
         print(f"Channel Width: ${result_h1['channel_width']:.4f}")
         print(f"Tong so channels: {len(result_h1['all_channels'])}")
         
+        # IN_CHANNEL (giá đang nằm trong)
         if result_h1['in_channel']:
             ch = result_h1['in_channel']
             ch_mid = (ch['low'] + ch['high']) / 2
             position = "duoi trung diem" if current_price < ch_mid else "tren trung diem"
             
-            print(f"\nTRONG CHANNEL (gia {position}):")
-            print(f"  ${ch['low']:.4f} - ${ch['high']:.4f}")
+            print(f"\n*** IN_CHANNEL (gia DANG NAM TRONG) ***")
+            print(f"  Range: ${ch['low']:.4f} - ${ch['high']:.4f}")
             print(f"  Mid: ${ch_mid:.4f}")
+            print(f"  Vi tri gia: {position}")
             print(f"  Do manh: {ch['strength']}")
-            print(f"  => Channel nay duoc phan loai: {'Resistance' if current_price < ch_mid else 'Support'}")
+            
+            # TEST ĐIỀU KIỆN CHẠM
+            h1_low = df_h1['low'].iloc[-1]
+            h1_high = df_h1['high'].iloc[-1]
+            h1_close = df_h1['close'].iloc[-1]
+            
+            print(f"\n  Nen hien tai H1:")
+            print(f"    Low: ${h1_low:.4f}, High: ${h1_high:.4f}, Close: ${h1_close:.4f}")
+            
+            # Check LONG
+            long_cond = h1_low <= ch['high'] and h1_close > ch['low']
+            print(f"\n  Dieu kien LONG: Low <= ch_high & Close > ch_low")
+            print(f"    {h1_low:.4f} <= {ch['high']:.4f} & {h1_close:.4f} > {ch['low']:.4f}")
+            print(f"    => THOA: {long_cond}")
+            
+            # Check SHORT
+            short_cond = h1_high >= ch['low'] and h1_close < ch['high']
+            print(f"\n  Dieu kien SHORT: High >= ch_low & Close < ch_high")
+            print(f"    {h1_high:.4f} >= {ch['low']:.4f} & {h1_close:.4f} < {ch['high']:.4f}")
+            print(f"    => THOA: {short_cond}")
+        else:
+            print(f"\n*** IN_CHANNEL: Khong co (gia khong nam trong channel nao) ***")
         
+        # KHÁNG CỰ (trên giá)
         if result_h1['resistances']:
-            print(f"\nKHANG CU ({len(result_h1['resistances'])}):")
+            print(f"\n*** KHANG CU - TREN GIA ({len(result_h1['resistances'])}) ***")
             for i, r in enumerate(result_h1['resistances'], 1):
                 print(f"  {i}. ${r['low']:.4f} - ${r['high']:.4f} (Do manh: {r['strength']})")
         else:
-            print(f"\nKHANG CU: Khong co")
+            print(f"\n*** KHANG CU: Khong co ***")
         
+        # HỖ TRỢ (dưới giá)
         if result_h1['supports']:
-            print(f"\nHO TRO ({len(result_h1['supports'])}):")
+            print(f"\n*** HO TRO - DUOI GIA ({len(result_h1['supports'])}) ***")
             for i, s in enumerate(result_h1['supports'], 1):
                 print(f"  {i}. ${s['low']:.4f} - ${s['high']:.4f} (Do manh: {s['strength']})")
         else:
-            print(f"\nHO TRO: Khong co")
+            print(f"\n*** HO TRO: Khong co ***")
     
     # Hiển thị M15
-    print(f"\n\nKHUNG M15")
-    print("-" * 80)
+    print(f"\n\n{'='*80}")
+    print(f"KHUNG M15")
+    print(f"{'='*80}")
     
     if not result_m15['success']:
         print(f"Loi: {result_m15['message']}")
     else:
         current_price = result_m15['current_price']
-        print(f"Gia hien tai: ${current_price:.4f}")
+        print(f"\nGia hien tai: ${current_price:.4f}")
         print(f"Channel Width: ${result_m15['channel_width']:.4f}")
         print(f"Tong so channels: {len(result_m15['all_channels'])}")
         
+        # IN_CHANNEL (giá đang nằm trong)
         if result_m15['in_channel']:
             ch = result_m15['in_channel']
             ch_mid = (ch['low'] + ch['high']) / 2
             position = "duoi trung diem" if current_price < ch_mid else "tren trung diem"
             
-            print(f"\nTRONG CHANNEL (gia {position}):")
-            print(f"  ${ch['low']:.4f} - ${ch['high']:.4f}")
+            print(f"\n*** IN_CHANNEL (gia DANG NAM TRONG) ***")
+            print(f"  Range: ${ch['low']:.4f} - ${ch['high']:.4f}")
             print(f"  Mid: ${ch_mid:.4f}")
+            print(f"  Vi tri gia: {position}")
             print(f"  Do manh: {ch['strength']}")
-            print(f"  => Channel nay duoc phan loai: {'Resistance' if current_price < ch_mid else 'Support'}")
+            
+            # TEST ĐIỀU KIỆN CHẠM - Kiểm tra 4 nến M15 cuối
+            print(f"\n  Kiem tra 4 nen M15 cuoi:")
+            last_4_m15 = df_m15.iloc[-4:]
+            
+            for j in range(len(last_4_m15)):
+                m15_time = last_4_m15.index[j]
+                m15_low = last_4_m15['low'].iloc[j]
+                m15_high = last_4_m15['high'].iloc[j]
+                m15_close = last_4_m15['close'].iloc[j]
+                
+                print(f"\n    Nen {j+1} ({m15_time.strftime('%H:%M')}):")
+                print(f"      Low: ${m15_low:.4f}, High: ${m15_high:.4f}, Close: ${m15_close:.4f}")
+                
+                long_cond = m15_low <= ch['high'] and m15_close > ch['low']
+                short_cond = m15_high >= ch['low'] and m15_close < ch['high']
+                
+                print(f"      LONG: {long_cond}, SHORT: {short_cond}")
+        else:
+            print(f"\n*** IN_CHANNEL: Khong co (gia khong nam trong channel nao) ***")
         
+        # KHÁNG CỰ (trên giá)
         if result_m15['resistances']:
-            print(f"\nKHANG CU ({len(result_m15['resistances'])}):")
+            print(f"\n*** KHANG CU - TREN GIA ({len(result_m15['resistances'])}) ***")
             for i, r in enumerate(result_m15['resistances'], 1):
                 print(f"  {i}. ${r['low']:.4f} - ${r['high']:.4f} (Do manh: {r['strength']})")
         else:
-            print(f"\nKHANG CU: Khong co")
+            print(f"\n*** KHANG CU: Khong co ***")
         
+        # HỖ TRỢ (dưới giá)
         if result_m15['supports']:
-            print(f"\nHO TRO ({len(result_m15['supports'])}):")
+            print(f"\n*** HO TRO - DUOI GIA ({len(result_m15['supports'])}) ***")
             for i, s in enumerate(result_m15['supports'], 1):
                 print(f"  {i}. ${s['low']:.4f} - ${s['high']:.4f} (Do manh: {s['strength']})")
         else:
-            print(f"\nHO TRO: Khong co")
+            print(f"\n*** HO TRO: Khong co ***")
     
-    # TEST LOGIC BOT: Kiểm tra nến hiện tại
-    print(f"\n\nTEST LOGIC BOT - NEN HIEN TAI")
-    print("=" * 80)
-    
-    # Nến H1
-    if result_h1['success'] and result_h1['in_channel']:
-        h1_low = df_h1['low'].iloc[-1]
-        h1_high = df_h1['high'].iloc[-1]
-        h1_close = df_h1['close'].iloc[-1]
-        
-        ch = result_h1['in_channel']
-        
-        print(f"\nH1 - Nen hien tai:")
-        print(f"  Low: ${h1_low:.4f}, High: ${h1_high:.4f}, Close: ${h1_close:.4f}")
-        print(f"  Channel: ${ch['low']:.4f} - ${ch['high']:.4f}")
-        
-        # Check LONG
-        long_cond = h1_low <= ch['high'] and h1_close > ch['low']
-        print(f"\n  Dieu kien LONG: Low <= channel_high & Close > channel_low")
-        print(f"    {h1_low:.4f} <= {ch['high']:.4f} ? {h1_low <= ch['high']}")
-        print(f"    {h1_close:.4f} > {ch['low']:.4f} ? {h1_close > ch['low']}")
-        print(f"    => THOA: {long_cond}")
-        
-        # Check SHORT
-        short_cond = h1_high >= ch['low'] and h1_close < ch['high']
-        print(f"\n  Dieu kien SHORT: High >= channel_low & Close < channel_high")
-        print(f"    {h1_high:.4f} >= {ch['low']:.4f} ? {h1_high >= ch['low']}")
-        print(f"    {h1_close:.4f} < {ch['high']:.4f} ? {h1_close < ch['high']}")
-        print(f"    => THOA: {short_cond}")
-    
-    # Nến M15
-    if result_m15['success'] and result_m15['in_channel']:
-        m15_low = df_m15['low'].iloc[-1]
-        m15_high = df_m15['high'].iloc[-1]
-        m15_close = df_m15['close'].iloc[-1]
-        
-        ch = result_m15['in_channel']
-        
-        print(f"\n\nM15 - Nen hien tai:")
-        print(f"  Low: ${m15_low:.4f}, High: ${m15_high:.4f}, Close: ${m15_close:.4f}")
-        print(f"  Channel: ${ch['low']:.4f} - ${ch['high']:.4f}")
-        
-        # Check LONG
-        long_cond = m15_low <= ch['high'] and m15_close > ch['low']
-        print(f"\n  Dieu kien LONG: Low <= channel_high & Close > channel_low")
-        print(f"    {m15_low:.4f} <= {ch['high']:.4f} ? {m15_low <= ch['high']}")
-        print(f"    {m15_close:.4f} > {ch['low']:.4f} ? {m15_close > ch['low']}")
-        print(f"    => THOA: {long_cond}")
-        
-        # Check SHORT
-        short_cond = m15_high >= ch['low'] and m15_close < ch['high']
-        print(f"\n  Dieu kien SHORT: High >= channel_low & Close < channel_high")
-        print(f"    {m15_high:.4f} >= {ch['low']:.4f} ? {m15_high >= ch['low']}")
-        print(f"    {m15_close:.4f} < {ch['high']:.4f} ? {m15_close < ch['high']}")
-        print(f"    => THOA: {short_cond}")
-    
-    print(f"\n{'='*80}\n")
+    print(f"\n{'='*80}")
+    print("TOM TAT LOGIC:")
+    print(f"{'='*80}")
+    print("1. in_channel: CHI chua gia dang nam TRONG channel")
+    print("2. supports: Cac channel DUOI gia (ch_high < current_price)")
+    print("3. resistances: Cac channel TREN gia (ch_low > current_price)")
+    print("4. Bot chi bao tin hieu khi in_channel != None")
+    print(f"{'='*80}\n")
 
 
 if __name__ == '__main__':
-    test_sr('BEAMXUSDT')
+    import sys
+    symbol = sys.argv[1] if len(sys.argv) > 1 else 'BTCUSDT'
+    test_sr(symbol)
