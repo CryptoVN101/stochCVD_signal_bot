@@ -1,11 +1,11 @@
 """
 Bot Telegram - CryptoVN 101
-Chỉ gửi tín hiệu Stoch + S/R
+Chỉ gửi tín hiệu khi nến đóng
 """
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.constants import ParseMode
@@ -22,13 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    """Lớp quản lý Telegram Bot - CHỈ STOCH + S/R"""
+    """Lớp quản lý Telegram Bot - CHỈ QUÉT KHI NẾN ĐÓNG"""
     
     def __init__(self):
         """Khởi tạo bot"""
         self.db = DatabaseManager()
         self.scanner = SignalScanner()
         self.app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        
+        # Lưu timestamp nến đã quét
+        self.last_scanned_m15 = None
+        self.last_scanned_h1 = None
         
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("add", self.cmd_add))
@@ -43,6 +47,36 @@ class TelegramBot:
         for symbol in config.DEFAULT_SYMBOLS:
             symbol_clean = symbol.replace('/', '')
             self.db.add_symbol(symbol_clean)
+    
+    def should_scan_now(self):
+        """
+        Kiểm tra xem có nên quét không (khi nến M15 hoặc H1 vừa đóng)
+        
+        Returns:
+            tuple: (should_scan, timeframe) - ('m15', 'h1', hoặc None)
+        """
+        now = datetime.now(config.TIMEZONE)
+        
+        # Làm tròn về phút gần nhất
+        current_minute = now.replace(second=0, microsecond=0)
+        
+        # Kiểm tra nến H1 (đóng vào phút :00)
+        if current_minute.minute == 0:
+            # Nến H1 vừa đóng
+            if self.last_scanned_h1 != current_minute:
+                self.last_scanned_h1 = current_minute
+                logger.info(f"✓ Nến H1 vừa đóng: {current_minute.strftime('%H:%M %d-%m-%Y')}")
+                return True, 'h1'
+        
+        # Kiểm tra nến M15 (đóng vào phút :00, :15, :30, :45)
+        if current_minute.minute % 15 == 0:
+            # Nến M15 vừa đóng
+            if self.last_scanned_m15 != current_minute:
+                self.last_scanned_m15 = current_minute
+                logger.info(f"✓ Nến M15 vừa đóng: {current_minute.strftime('%H:%M %d-%m-%Y')}")
+                return True, 'm15'
+        
+        return False, None
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Lệnh /start"""
@@ -144,14 +178,14 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         symbol = signal['symbol']
         signal_type = signal['signal_type']
         price = signal['price']
-    
+        
         icon = "🟢" if signal_type == 'BUY' else "🔴"
         type_text = "BUY/LONG" if signal_type == 'BUY' else "SELL/SHORT"
-    
+        
         sr_type = signal.get('sr_type', 'support/resistance')
         timeframes = signal.get('timeframes', 'H1')
         sr_name = "hỗ trợ" if sr_type == 'support' else "kháng cự"
-    
+        
         message = f"🔶 Token: {symbol} (Bybit)\n\n"
         message += f"{icon} Tín hiệu đảo chiều {type_text}\n\n"
         message += f"⏰ Phản ứng với {sr_name} khung {timeframes}\n\n"
@@ -177,8 +211,8 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
                 signal_type=signal['signal_type'],
                 signal_time=signal['signal_time'],
                 price=signal['price'],
-                stoch_m15=signal['stoch_m15'],
-                stoch_h1=signal['stoch_h1']
+                stoch_m15=signal['stoch_d_m15'],
+                stoch_h1=signal['stoch_d_h1']
             )
             
             if saved:
@@ -188,20 +222,34 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
             logger.error(f"Lỗi khi gửi tín hiệu: {str(e)}")
     
     async def scan_loop(self):
-        """Vòng lặp quét tín hiệu liên tục"""
-        logger.info("Bắt đầu quét tín hiệu...")
+        """Vòng lặp quét tín hiệu - CHỈ QUÉT KHI NẾN ĐÓNG"""
+        logger.info("Bắt đầu vòng lặp quét tín hiệu (chỉ quét khi nến đóng)...")
         
         while True:
             try:
+                # Kiểm tra xem có nên quét không
+                should_scan, timeframe = self.should_scan_now()
+                
+                if not should_scan:
+                    # Chưa đến lúc quét, đợi 30 giây
+                    await asyncio.sleep(30)
+                    continue
+                
+                # Đến lúc quét
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"BẮT ĐẦU QUÉT ({timeframe.upper()})")
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                
                 symbols = self.db.get_active_symbols()
                 
                 if not symbols:
                     logger.warning("Không có symbol nào trong watchlist")
-                    await asyncio.sleep(60)
+                    await asyncio.sleep(30)
                     continue
                 
                 logger.info(f"Quét {len(symbols)} symbols...")
                 
+                signal_count = 0
                 for symbol in symbols:
                     try:
                         signal = self.scanner.check_signal(symbol)
@@ -211,17 +259,22 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
                             
                             if not self.db.check_signal_exists(signal_id):
                                 await self.send_signal_to_channel(signal)
+                                signal_count += 1
                             else:
-                                logger.info(f"Tín hiệu {signal['signal_type']} cho {symbol} đã được gửi trước đó")
+                                logger.debug(f"Signal {signal_id} đã tồn tại, skip")
                         
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(1)
                         
                     except Exception as e:
                         logger.error(f"Lỗi khi quét {symbol}: {str(e)}")
                         continue
                 
-                logger.info(f"Hoàn thành quét. Chờ {config.SCAN_INTERVAL} giây...")
-                await asyncio.sleep(config.SCAN_INTERVAL)
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"HOÀN THÀNH: Gửi {signal_count} tín hiệu mới")
+                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                
+                # Đợi 30 giây trước khi check lại
+                await asyncio.sleep(30)
                 
             except Exception as e:
                 logger.error(f"Lỗi trong vòng lặp quét: {str(e)}")
@@ -235,7 +288,7 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         await self.app.start()
         await self.app.updater.start_polling(drop_pending_updates=True)
         
-        logger.info("Bot đã sẵn sàng! Chỉ gửi tín hiệu Stoch + S/R")
+        logger.info("Bot đã sẵn sàng! Chỉ quét khi nến M15/H1 đóng")
         
         await self.scan_loop()
     
