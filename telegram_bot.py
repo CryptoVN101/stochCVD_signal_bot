@@ -160,11 +160,11 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
 <b>4. Tín hiệu Stoch + S/R:</b>
 
 🟢 <b>LONG (MUA):</b>
-- Stoch H1 < 25 & M15 < 25
+- Stoch H1 %D < 25 & M15 %D < 20
 - Nến chạm vùng hỗ trợ trên M15 và/hoặc H1
 
 🔴 <b>SHORT (BÁN):</b>
-- Stoch H1 > 75 & M15 > 75
+- Stoch H1 %K > 75 & M15 %K > 80
 - Nến chạm vùng kháng cự trên M15 và/hoặc H1
 
 ⚠️ <b>Lưu ý:</b>
@@ -175,21 +175,41 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         await update.message.reply_text(help_msg, parse_mode=ParseMode.HTML)
     
     def format_signal_message(self, signal):
-        """Format message cho tín hiệu - CHỈ STOCH"""
+        """
+        Format message cho tín hiệu
+        
+        HIỂN THỊ RÕ KHUNG THỜI GIAN CHẠM S/R
+        """
         symbol = signal['symbol']
         signal_type = signal['signal_type']
         price = signal['price']
-    
+        
         icon = "🟢" if signal_type == 'BUY' else "🔴"
         type_text = "BUY/LONG" if signal_type == 'BUY' else "SELL/SHORT"
-    
+        
+        # Lấy thông tin timeframe và SR type
+        timeframes = signal.get('timeframes', 'H1')
+        sr_type = signal.get('sr_type', 'support')
+        sr_name = "hỗ trợ" if sr_type == 'support' else "kháng cự"
+        
+        # FORMAT MESSAGE MỚI - RÕ RÀNG KHUNG CHẠM S/R
         message = f"🔶 Token: {symbol} (Bybit)\n\n"
         message += f"{icon} Tín hiệu đảo chiều {type_text}\n\n"
-        message += f"⏰ Khung thời gian: H1 & M15\n\n"
+        
+        # HIỂN THỊ KHUNG THỜI GIAN CHẠM S/R
+        if 'M15' in timeframes and 'H1' in timeframes:
+            message += f"⏰ Phản ứng với {sr_name} khung M15 & H1\n\n"
+        elif 'M15' in timeframes:
+            message += f"⏰ Phản ứng với {sr_name} khung M15\n\n"
+        elif 'H1' in timeframes:
+            message += f"⏰ Phản ứng với {sr_name} khung H1\n\n"
+        else:
+            message += f"⏰ Khung thời gian: {timeframes}\n\n"
+        
         message += f"💰 Giá xác nhận: ${price:.4f}\n\n"
         message += f"📊 Stoch %K H1/M15: {signal['stoch_k_h1']:.2f} / {signal['stoch_k_m15']:.2f}\n"
         message += f"📊 Stoch %D H1/M15: {signal['stoch_d_h1']:.2f} / {signal['stoch_d_m15']:.2f}"
-    
+        
         return message.strip()
     
     async def send_signal_to_channel(self, signal):
@@ -267,9 +287,9 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
                     continue
                 
                 # Đến lúc quét
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"BẮT ĐẦU QUÉT ({timeframe.upper()})")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"┌{'─'*78}┐")
+                logger.info(f"│ BẮT ĐẦU QUÉT ({timeframe.upper()})".ljust(79) + "│")
+                logger.info(f"└{'─'*78}┘")
                 
                 symbols = self.db.get_active_symbols()
                 
@@ -304,9 +324,9 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
                         logger.error(f"Lỗi khi quét {symbol}: {str(e)}")
                         continue
                 
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                logger.info(f"HOÀN THÀNH: Gửi {signal_count} tín hiệu mới")
-                logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                logger.info(f"┌{'─'*78}┐")
+                logger.info(f"│ HOÀN THÀNH: Gửi {signal_count} tín hiệu mới".ljust(79) + "│")
+                logger.info(f"└{'─'*78}┘")
                 
                 # Đợi 30 giây trước khi check lại
                 await asyncio.sleep(30)
