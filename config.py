@@ -115,11 +115,11 @@ SR_MAX_CHANNELS = 6               # Số channels hiển thị
 SR_ENABLED = True                 # Bật/tắt filter S/R
 
 # ============================================
-# CẤU HÌNH S/R CHO KHUNG M15 (RIÊNG)
+# CẤU HÌNH S/R CHO KHUNG M15 (GIỐNG H1)
 # ============================================
-SR_M15_PIVOT_PERIOD = 5               # Pivot nhỏ hơn H1
-SR_M15_CHANNEL_WIDTH_PERCENT = 3.0    # Hẹp hơn H1
-SR_M15_LOOPBACK_PERIOD = 200          # Ít hơn H1
+SR_M15_PIVOT_PERIOD = 10              # GIỐNG H1
+SR_M15_CHANNEL_WIDTH_PERCENT = 5.0    # GIỐNG H1
+SR_M15_LOOPBACK_PERIOD = 290          # GIỐNG H1
 SR_M15_MIN_STRENGTH = 1
 SR_M15_MAX_CHANNELS = 6
 

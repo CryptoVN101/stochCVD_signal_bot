@@ -175,23 +175,21 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
         await update.message.reply_text(help_msg, parse_mode=ParseMode.HTML)
     
     def format_signal_message(self, signal):
-        """Format message cho tín hiệu"""
+        """Format message cho tín hiệu - CHỈ STOCH"""
         symbol = signal['symbol']
         signal_type = signal['signal_type']
         price = signal['price']
-        
+    
         icon = "🟢" if signal_type == 'BUY' else "🔴"
         type_text = "BUY/LONG" if signal_type == 'BUY' else "SELL/SHORT"
-        
-        sr_type = signal.get('sr_type', 'support/resistance')
-        timeframes = signal.get('timeframes', 'H1')
-        sr_name = "hỗ trợ" if sr_type == 'support' else "kháng cự"
-        
+    
         message = f"🔶 Token: {symbol} (Bybit)\n\n"
         message += f"{icon} Tín hiệu đảo chiều {type_text}\n\n"
-        message += f"⏰ Phản ứng với {sr_name} khung {timeframes}\n\n"
-        message += f"💰 Giá xác nhận: ${price:.4f}"
-        
+        message += f"⏰ Khung thời gian: H1 & M15\n\n"
+        message += f"💰 Giá xác nhận: ${price:.4f}\n\n"
+        message += f"📊 Stoch %K H1/M15: {signal['stoch_k_h1']:.2f} / {signal['stoch_k_m15']:.2f}\n"
+        message += f"📊 Stoch %D H1/M15: {signal['stoch_d_h1']:.2f} / {signal['stoch_d_m15']:.2f}"
+    
         return message.strip()
     
     async def send_signal_to_channel(self, signal):

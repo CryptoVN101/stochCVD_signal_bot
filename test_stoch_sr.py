@@ -1,6 +1,10 @@
 """
-Test tín hiệu STOCH + S/R - GIỐNG HỆT BOT LIVE
+Test tín hiệu STOCH + S/R - GIỐNG HẾT BOT LIVE
 Backtest chính xác như bot sẽ chạy
+
+ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
+- LONG: H1 %D < 25 & M15 %D < 20
+- SHORT: H1 %K > 75 & M15 %K > 80
 """
 
 import pandas as pd
@@ -32,6 +36,10 @@ def check_signal_at_candle(df_m15, df_h1, i_h1, stoch, sr_h1_obj, sr_m15_obj):
     """
     Kiểm tra tín hiệu tại nến H1 index i_h1
     Logic giống hệt signal_scanner.py
+    
+    ĐIỀU KIỆN STOCH MỚI:
+    - LONG: H1 %D < 25 & M15 %D < 20
+    - SHORT: H1 %K > 75 & M15 %K > 80
     """
     signal_time = df_h1.index[i_h1]
     
@@ -51,12 +59,15 @@ def check_signal_at_candle(df_m15, df_h1, i_h1, stoch, sr_h1_obj, sr_m15_obj):
     stoch_d_m15 = stoch_d_m15_series.iloc[m15_idx]
     stoch_k_m15 = stoch_k_m15_series.iloc[m15_idx]
     
-    # Kiểm tra điều kiện Stoch
-    # LONG: %D < 25 (dây cam)
-    is_long = stoch_d_h1 < 25 and stoch_d_m15 < 25
+    # ========================================================================
+    # ĐIỀU KIỆN STOCH MỚI - SIẾT CHẶT M15
+    # ========================================================================
     
-    # SHORT: %K > 75 (dây xanh)
-    is_short = stoch_k_h1 > 75 and stoch_k_m15 > 75
+    # LONG: H1 %D < 25 & M15 %D < 20 (SIẾT CHẶT)
+    is_long = stoch_d_h1 < 25 and stoch_d_m15 < 20
+    
+    # SHORT: H1 %K > 75 & M15 %K > 80 (SIẾT CHẶT)
+    is_short = stoch_k_h1 > 75 and stoch_k_m15 > 80
     
     if not (is_long or is_short):
         return None
@@ -164,19 +175,27 @@ def filter_signal_by_timeframe(signal, signal_time):
     return None
 
 
-def test_stoch_sr(symbol='BEAMXUSDT', lookback_candles=100):
+def test_stoch_sr(symbol='BTCUSDT', lookback_candles=100):
     """
     Test Stoch + S/R - BACKTEST GIỐNG BOT LIVE
+    
+    ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
+    - LONG: H1 %D < 25 & M15 %D < 20
+    - SHORT: H1 %K > 75 & M15 %K > 80
     """
     
     print(f"\n{'='*80}")
-    print(f"BACKTEST TÍN HIỆU STOCH + S/R - {symbol}")
+    print(f"BACKTEST TIN HIEU STOCH + S/R - {symbol}")
     print(f"{'='*80}")
-    print(f"Logic giống hệt bot live:")
-    print(f"  - Tín hiệu H1: Chỉ báo khi nến H1 đóng (:00)")
-    print(f"  - Tín hiệu M15: Chỉ báo khi nến M15 đóng (:15, :30, :45, :00)")
-    print(f"  - Tín hiệu M15 & H1: Chỉ báo khi cả 2 đóng (:00)")
-    print(f"  - Nếu có H1 mà chưa đến :00 → KHÔNG báo")
+    print(f"DIEU KIEN STOCH MOI (SIET CHAT M15):")
+    print(f"  - LONG: H1 %D < 25 & M15 %D < 20")
+    print(f"  - SHORT: H1 %K > 75 & M15 %K > 80")
+    print(f"\nLogic S/R: TradingView (support_resistance_channel.py)")
+    print(f"Logic giong het bot live:")
+    print(f"  - Tin hieu H1: Chi bao khi nen H1 dong (:00)")
+    print(f"  - Tin hieu M15: Chi bao khi nen M15 dong (:15, :30, :45, :00)")
+    print(f"  - Tin hieu M15 & H1: Chi bao khi ca 2 dong (:00)")
+    print(f"  - Neu co H1 ma chua den :00 → KHONG bao")
     
     df_m15 = fetch_data(symbol, '15m', 500)
     df_h1 = fetch_data(symbol, '1h', 500)
@@ -222,7 +241,7 @@ def test_stoch_sr(symbol='BEAMXUSDT', lookback_candles=100):
             signal['send_type'] = send_type
             signals.append(signal)
     
-    print(f"\nKẾT QUẢ: {len(signals)} tín hiệu được báo")
+    print(f"\nKET QUA: {len(signals)} tin hieu duoc bao")
     
     if signals:
         print(f"\n{'='*80}")
@@ -234,7 +253,7 @@ def test_stoch_sr(symbol='BEAMXUSDT', lookback_candles=100):
         h1_only = sum(1 for s in signals if 'M15' not in s['timeframes'])
         both_tf = sum(1 for s in signals if 'M15' in s['timeframes'] and 'H1' in s['timeframes'])
         
-        print(f"\nTHỐNG KÊ:")
+        print(f"\nTHONG KE:")
         print(f"  🟢 BUY: {buy_count}")
         print(f"  🔴 SELL: {sell_count}")
         print(f"  📊 M15 only: {m15_only}")
@@ -242,21 +261,21 @@ def test_stoch_sr(symbol='BEAMXUSDT', lookback_candles=100):
         print(f"  📊 M15 & H1: {both_tf}")
         
         print(f"\n{'='*80}")
-        print("CHI TIẾT CÁC TÍN HIỆU:")
+        print("CHI TIET CAC TIN HIEU:")
         print(f"{'='*80}\n")
         
         for i, sig in enumerate(signals, 1):
             icon = "🟢" if sig['type'] == 'BUY' else "🔴"
             
             print(f"{i}. {icon} {sig['type']}")
-            print(f"   Thời gian: {sig['time'].strftime('%H:%M %d-%m-%Y')} ({sig['send_type']})")
-            print(f"   Giá: ${sig['price']:.4f}")
+            print(f"   Thoi gian: {sig['time'].strftime('%H:%M %d-%m-%Y')} ({sig['send_type']})")
+            print(f"   Gia: ${sig['price']:.4f}")
             print(f"   Stoch %K H1/M15: {sig['stoch_k_h1']:.2f} / {sig['stoch_k_m15']:.2f}")
             print(f"   Stoch %D H1/M15: {sig['stoch_d_h1']:.2f} / {sig['stoch_d_m15']:.2f}")
-            print(f"   Chạm {sig['sr_type']}: {sig['timeframes']}")
+            print(f"   Cham {sig['sr_type']}: {sig['timeframes']}")
             print()
     else:
-        print(f"\nKhông có tín hiệu nào được báo")
+        print(f"\nKhong co tin hieu nao duoc bao")
     
     print(f"{'='*80}\n")
 

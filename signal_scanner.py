@@ -1,5 +1,10 @@
 """
-Scanner tín hiệu - Chỉ Stoch + S/R
+Scanner tín hiệu - Stoch + S/R
+Logic S/R từ TradingView (support_resistance_channel.py)
+
+ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
+- LONG: H1 %D < 25 & M15 %D < 20
+- SHORT: H1 %K > 75 & M15 %K > 80
 """
 
 import pandas as pd
@@ -14,7 +19,7 @@ VIETNAM_TZ = pytz.timezone('Asia/Ho_Chi_Minh')
 
 
 class SignalScanner:
-    """Lớp quét tín hiệu - CHỈ STOCH + S/R"""
+    """Lớp quét tín hiệu - STOCH + S/R"""
     
     def __init__(self):
         """Khởi tạo scanner"""
@@ -86,7 +91,13 @@ class SignalScanner:
     def _check_signal_stoch_sr(self, symbol, df_m15, df_h1, 
                                 stoch_k_m15, stoch_d_m15, 
                                 stoch_k_h1, stoch_d_h1):
-        """Signal: Stoch + S/R - LOGIC MỚI"""
+        """
+        Signal: Stoch + S/R
+        
+        ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
+        - LONG: H1 %D < 25 & M15 %D < 20
+        - SHORT: H1 %K > 75 & M15 %K > 80
+        """
         try:
             # Lấy giá trị Stoch hiện tại
             stoch_d_h1_value = stoch_d_h1.iloc[-1]   # %D H1 (cam)
@@ -97,12 +108,15 @@ class SignalScanner:
             signal_time = df_h1.index[-1]
             candle_close = df_h1['close'].iloc[-1]
             
-            # Kiểm tra điều kiện Stoch
-            # LONG: %D < 25 (dây cam)
-            is_long = stoch_d_h1_value < 25 and stoch_d_m15_value < 25
+            # ========================================================================
+            # ĐIỀU KIỆN STOCH MỚI - SIẾT CHẶT M15
+            # ========================================================================
             
-            # SHORT: %K > 75 (dây xanh)
-            is_short = stoch_k_h1_value > 75 and stoch_k_m15_value > 75
+            # LONG: H1 %D < 25 & M15 %D < 20 (SIẾT CHẶT)
+            is_long = stoch_d_h1_value < 25 and stoch_d_m15_value < 20
+            
+            # SHORT: H1 %K > 75 & M15 %K > 80 (SIẾT CHẶT)
+            is_short = stoch_k_h1_value > 75 and stoch_k_m15_value > 80
             
             if not (is_long or is_short):
                 return None

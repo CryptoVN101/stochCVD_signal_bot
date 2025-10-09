@@ -1,5 +1,5 @@
 """
-Test chỉ báo S/R - Đúng logic support_resistance.py mới
+Test chỉ báo S/R - Logic từ TradingView
 """
 
 import pandas as pd
@@ -26,19 +26,22 @@ def fetch_data(symbol, timeframe, limit):
     return df
 
 
-def test_sr(symbol='PENDLEUSDT'):
-    """Test S/R - Logic mới (in_channel không nằm trong supports/resistances)"""
-    
-    print(f"\n{'='*80}")
-    print(f"TEST CHI BAO S/R - {symbol}")
-    print(f"{'='*80}")
-    print(f"Logic moi:")
-    print(f"  - in_channel: Gia DANG NAM TRONG channel")
-    print(f"  - supports: Cac channel DUOI gia (khong bao gom in_channel)")
-    print(f"  - resistances: Cac channel TREN gia (khong bao gom in_channel)")
+def test_sr(symbol='BTCUSDT'):
+    """Test S/R - Logic từ TradingView"""
     
     df_m15 = fetch_data(symbol, '15m', 500)
     df_h1 = fetch_data(symbol, '1h', 500)
+    
+    print(f"\nNEN CUOI CUNG:")
+    print(f"  M15: {df_m15.index[-1]} - Close: ${df_m15['close'].iloc[-1]:.2f}")
+    print(f"  H1:  {df_h1.index[-1]} - Close: ${df_h1['close'].iloc[-1]:.2f}")
+    print(f"\n{'='*80}")
+    print(f"TEST CHI BAO S/R (TradingView Logic) - {symbol}")
+    print(f"{'='*80}")
+    print(f"Logic:")
+    print(f"  - in_channel: Gia DANG NAM TRONG channel")
+    print(f"  - supports: Cac channel DUOI gia (khong bao gom in_channel)")
+    print(f"  - resistances: Cac channel TREN gia (khong bao gom in_channel)")
     
     # S/R H1
     sr_h1 = SupportResistanceChannel(
