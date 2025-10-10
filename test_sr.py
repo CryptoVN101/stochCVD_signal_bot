@@ -1,5 +1,6 @@
 """
 Test chỉ báo S/R - Logic từ TradingView
+HIỂN THỊ VỊ TRÍ GIÁ TRONG CHANNEL
 """
 
 import pandas as pd
@@ -27,7 +28,7 @@ def fetch_data(symbol, timeframe, limit):
 
 
 def test_sr(symbol='BTCUSDT'):
-    """Test S/R - Logic từ TradingView"""
+    """Test S/R - Logic từ TradingView - HIỂN THỊ VỊ TRÍ GIÁ"""
     
     df_m15 = fetch_data(symbol, '15m', 500)
     df_h1 = fetch_data(symbol, '1h', 500)
@@ -42,6 +43,9 @@ def test_sr(symbol='BTCUSDT'):
     print(f"  - in_channel: Gia DANG NAM TRONG channel")
     print(f"  - supports: Cac channel DUOI gia (khong bao gom in_channel)")
     print(f"  - resistances: Cac channel TREN gia (khong bao gom in_channel)")
+    print(f"\nLOGIC PHAN BIET VI TRI GIA:")
+    print(f"  - Close > Mid: GIA O NUA TREN → Test SUPPORT tu tren xuong")
+    print(f"  - Close < Mid: GIA O NUA DUOI → Test RESISTANCE tu duoi len")
     
     # S/R H1
     sr_h1 = SupportResistanceChannel(
@@ -80,12 +84,19 @@ def test_sr(symbol='BTCUSDT'):
         if result_h1['in_channel']:
             ch = result_h1['in_channel']
             ch_mid = (ch['low'] + ch['high']) / 2
-            position = "duoi trung diem" if current_price < ch_mid else "tren trung diem"
+            
+            # XÁC ĐỊNH VỊ TRÍ GIÁ
+            if current_price > ch_mid:
+                position = "NUA TREN (test SUPPORT)"
+                position_emoji = "🟢"
+            else:
+                position = "NUA DUOI (test RESISTANCE)"
+                position_emoji = "🔴"
             
             print(f"\n*** IN_CHANNEL (gia DANG NAM TRONG) ***")
             print(f"  Range: ${ch['low']:.4f} - ${ch['high']:.4f}")
             print(f"  Mid: ${ch_mid:.4f}")
-            print(f"  Vi tri gia: {position}")
+            print(f"  {position_emoji} Vi tri gia: {position}")
             print(f"  Do manh: {ch['strength']}")
             
             # TEST ĐIỀU KIỆN CHẠM
@@ -96,17 +107,27 @@ def test_sr(symbol='BTCUSDT'):
             print(f"\n  Nen hien tai H1:")
             print(f"    Low: ${h1_low:.4f}, High: ${h1_high:.4f}, Close: ${h1_close:.4f}")
             
-            # Check LONG
-            long_cond = h1_low <= ch['high'] and h1_close > ch['low']
-            print(f"\n  Dieu kien LONG: Low <= ch_high & Close > ch_low")
-            print(f"    {h1_low:.4f} <= {ch['high']:.4f} & {h1_close:.4f} > {ch['low']:.4f}")
-            print(f"    => THOA: {long_cond}")
+            # Check LONG (CHỈ KHI Ở NỬA TRÊN)
+            print(f"\n  Dieu kien LONG:")
+            print(f"    1. Close > Mid? {h1_close:.4f} > {ch_mid:.4f} = {h1_close > ch_mid}")
+            if h1_close > ch_mid:
+                long_cond = h1_low <= ch['high'] and h1_close > ch['low']
+                print(f"    2. Low <= ch_high & Close > ch_low")
+                print(f"       {h1_low:.4f} <= {ch['high']:.4f} & {h1_close:.4f} > {ch['low']:.4f}")
+                print(f"    => THOA: {long_cond}")
+            else:
+                print(f"    => KHONG THOA: Gia khong o nua tren channel")
             
-            # Check SHORT
-            short_cond = h1_high >= ch['low'] and h1_close < ch['high']
-            print(f"\n  Dieu kien SHORT: High >= ch_low & Close < ch_high")
-            print(f"    {h1_high:.4f} >= {ch['low']:.4f} & {h1_close:.4f} < {ch['high']:.4f}")
-            print(f"    => THOA: {short_cond}")
+            # Check SHORT (CHỈ KHI Ở NỬA DƯỚI)
+            print(f"\n  Dieu kien SHORT:")
+            print(f"    1. Close < Mid? {h1_close:.4f} < {ch_mid:.4f} = {h1_close < ch_mid}")
+            if h1_close < ch_mid:
+                short_cond = h1_high >= ch['low'] and h1_close < ch['high']
+                print(f"    2. High >= ch_low & Close < ch_high")
+                print(f"       {h1_high:.4f} >= {ch['low']:.4f} & {h1_close:.4f} < {ch['high']:.4f}")
+                print(f"    => THOA: {short_cond}")
+            else:
+                print(f"    => KHONG THOA: Gia khong o nua duoi channel")
         else:
             print(f"\n*** IN_CHANNEL: Khong co (gia khong nam trong channel nao) ***")
         
@@ -143,12 +164,19 @@ def test_sr(symbol='BTCUSDT'):
         if result_m15['in_channel']:
             ch = result_m15['in_channel']
             ch_mid = (ch['low'] + ch['high']) / 2
-            position = "duoi trung diem" if current_price < ch_mid else "tren trung diem"
+            
+            # XÁC ĐỊNH VỊ TRÍ GIÁ
+            if current_price > ch_mid:
+                position = "NUA TREN (test SUPPORT)"
+                position_emoji = "🟢"
+            else:
+                position = "NUA DUOI (test RESISTANCE)"
+                position_emoji = "🔴"
             
             print(f"\n*** IN_CHANNEL (gia DANG NAM TRONG) ***")
             print(f"  Range: ${ch['low']:.4f} - ${ch['high']:.4f}")
             print(f"  Mid: ${ch_mid:.4f}")
-            print(f"  Vi tri gia: {position}")
+            print(f"  {position_emoji} Vi tri gia: {position}")
             print(f"  Do manh: {ch['strength']}")
             
             # TEST ĐIỀU KIỆN CHẠM - Kiểm tra 4 nến M15 cuối
@@ -164,10 +192,15 @@ def test_sr(symbol='BTCUSDT'):
                 print(f"\n    Nen {j+1} ({m15_time.strftime('%H:%M')}):")
                 print(f"      Low: ${m15_low:.4f}, High: ${m15_high:.4f}, Close: ${m15_close:.4f}")
                 
-                long_cond = m15_low <= ch['high'] and m15_close > ch['low']
-                short_cond = m15_high >= ch['low'] and m15_close < ch['high']
-                
-                print(f"      LONG: {long_cond}, SHORT: {short_cond}")
+                # Check vị trí
+                if m15_close > ch_mid:
+                    print(f"      Vi tri: NUA TREN (test support)")
+                    long_cond = m15_low <= ch['high'] and m15_close > ch['low']
+                    print(f"      LONG: {long_cond}")
+                else:
+                    print(f"      Vi tri: NUA DUOI (test resistance)")
+                    short_cond = m15_high >= ch['low'] and m15_close < ch['high']
+                    print(f"      SHORT: {short_cond}")
         else:
             print(f"\n*** IN_CHANNEL: Khong co (gia khong nam trong channel nao) ***")
         
@@ -193,7 +226,9 @@ def test_sr(symbol='BTCUSDT'):
     print("1. in_channel: CHI chua gia dang nam TRONG channel")
     print("2. supports: Cac channel DUOI gia (ch_high < current_price)")
     print("3. resistances: Cac channel TREN gia (ch_low > current_price)")
-    print("4. Bot chi bao tin hieu khi in_channel != None")
+    print("4. LOGIC MOI - PHAN BIET VI TRI GIA:")
+    print("   - LONG: Chi bao khi Close > Mid (nua tren channel)")
+    print("   - SHORT: Chi bao khi Close < Mid (nua duoi channel)")
     print(f"{'='*80}\n")
 
 

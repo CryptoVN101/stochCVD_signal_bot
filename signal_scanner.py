@@ -2,9 +2,13 @@
 Scanner tín hiệu - Stoch + S/R
 Logic S/R từ TradingView (support_resistance_channel.py)
 
-ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
+ĐIỀU KIỆN STOCH (SIẾT CHẶT M15):
 - LONG: H1 %D < 25 & M15 %D < 20
 - SHORT: H1 %K > 75 & M15 %K > 80
+
+LOGIC ĐƠN GIẢN - CHỈ CHECK OPEN:
+- LONG: Nến trước Open ≥ ch_high → Giá giảm vào support
+- SHORT: Nến trước Open ≤ ch_low → Giá tăng vào resistance
 """
 
 import pandas as pd
@@ -92,30 +96,20 @@ class SignalScanner:
                                 stoch_k_m15, stoch_d_m15, 
                                 stoch_k_h1, stoch_d_h1):
         """
-        Signal: Stoch + S/R
-        
-        ĐIỀU KIỆN STOCH MỚI (SIẾT CHẶT M15):
-        - LONG: H1 %D < 25 & M15 %D < 20
-        - SHORT: H1 %K > 75 & M15 %K > 80
+        Signal: Stoch + S/R - Logic đơn giản: Chỉ check Open
         """
         try:
             # Lấy giá trị Stoch hiện tại
-            stoch_d_h1_value = stoch_d_h1.iloc[-1]   # %D H1 (cam)
-            stoch_d_m15_value = stoch_d_m15.iloc[-1]  # %D M15 (cam)
-            stoch_k_h1_value = stoch_k_h1.iloc[-1]   # %K H1 (xanh)
-            stoch_k_m15_value = stoch_k_m15.iloc[-1]  # %K M15 (xanh)
+            stoch_d_h1_value = stoch_d_h1.iloc[-1]
+            stoch_d_m15_value = stoch_d_m15.iloc[-1]
+            stoch_k_h1_value = stoch_k_h1.iloc[-1]
+            stoch_k_m15_value = stoch_k_m15.iloc[-1]
             
             signal_time = df_h1.index[-1]
             candle_close = df_h1['close'].iloc[-1]
             
-            # ========================================================================
-            # ĐIỀU KIỆN STOCH MỚI - SIẾT CHẶT M15
-            # ========================================================================
-            
-            # LONG: H1 %D < 25 & M15 %D < 20 (SIẾT CHẶT)
+            # ĐIỀU KIỆN STOCH
             is_long = stoch_d_h1_value < 25 and stoch_d_m15_value < 20
-            
-            # SHORT: H1 %K > 75 & M15 %K > 80 (SIẾT CHẶT)
             is_short = stoch_k_h1_value > 75 and stoch_k_m15_value > 80
             
             if not (is_long or is_short):
@@ -127,49 +121,114 @@ class SignalScanner:
             
             timeframes_touched = []
             
-            # Check H1 in_channel
+            # ========================================================================
+            # CHECK H1 - LOGIC ĐƠN GIẢN
+            # ========================================================================
             if sr_h1['success'] and sr_h1['in_channel']:
                 h1_low = df_h1['low'].iloc[-1]
                 h1_high = df_h1['high'].iloc[-1]
                 h1_close = df_h1['close'].iloc[-1]
+                h1_open = df_h1['open'].iloc[-1]
                 
                 channel = sr_h1['in_channel']
-                channel_low = channel['low']
-                channel_high = channel['high']
+                ch_low = channel['low']
+                ch_high = channel['high']
+                ch_mid = (ch_low + ch_high) / 2
                 
                 if is_long:
-                    # LONG: Low <= channel_high && Close > channel_low
-                    if h1_low <= channel_high and h1_close > channel_low:
-                        timeframes_touched.append('H1')
+                    # LONG: Nến hiện tại
+                    current_in_upper = h1_close > ch_mid
+                    current_in_channel = h1_close > ch_low and h1_close < ch_high
+                    
+                    if current_in_upper and current_in_channel and len(df_h1) > 1:
+                        # Nến trước: Open trên channel
+                        prev_h1_open = df_h1['open'].iloc[-2]
+                        prev_valid = prev_h1_open >= ch_high
+                        
+                        if prev_valid:
+                            # Nến hiện tại chạm support
+                            if h1_low <= ch_high and h1_close > ch_low:
+                                timeframes_touched.append('H1')
                 
                 elif is_short:
-                    # SHORT: High >= channel_low && Close < channel_high
-                    if h1_high >= channel_low and h1_close < channel_high:
-                        timeframes_touched.append('H1')
+                    # SHORT: Nến hiện tại
+                    current_in_lower = h1_close < ch_mid
+                    current_in_channel = h1_close > ch_low and h1_close < ch_high
+                    
+                    if current_in_lower and current_in_channel and len(df_h1) > 1:
+                        # Nến trước: Open dưới channel
+                        prev_h1_open = df_h1['open'].iloc[-2]
+                        prev_valid = prev_h1_open <= ch_low
+                        
+                        if prev_valid:
+                            # Nến hiện tại chạm resistance
+                            if h1_high >= ch_low and h1_close < ch_high:
+                                timeframes_touched.append('H1')
             
-            # Check 4 nến M15
+            # ========================================================================
+            # CHECK 4 NẾN M15 - LOGIC ĐƠN GIẢN
+            # ========================================================================
             if sr_m15['success'] and sr_m15['in_channel']:
                 last_4_m15 = df_m15.iloc[-4:]
                 
                 channel = sr_m15['in_channel']
-                channel_low = channel['low']
-                channel_high = channel['high']
+                ch_low = channel['low']
+                ch_high = channel['high']
+                ch_mid = (ch_low + ch_high) / 2
                 
                 m15_touched = False
+                
                 for i in range(len(last_4_m15)):
                     m15_low = last_4_m15['low'].iloc[i]
                     m15_high = last_4_m15['high'].iloc[i]
                     m15_close = last_4_m15['close'].iloc[i]
+                    m15_open = last_4_m15['open'].iloc[i]
                     
                     if is_long:
-                        if m15_low <= channel_high and m15_close > channel_low:
-                            m15_touched = True
-                            break
+                        # LONG: Nến hiện tại
+                        current_in_upper = m15_close > ch_mid
+                        current_in_channel = m15_close > ch_low and m15_close < ch_high
+                        
+                        if current_in_upper and current_in_channel:
+                            # Check nến trước (nếu có)
+                            if i > 0:
+                                prev_m15_open = last_4_m15['open'].iloc[i-1]
+                                
+                                # ĐƠN GIẢN: Chỉ cần Open trên channel
+                                prev_valid = prev_m15_open >= ch_high
+                                
+                                if prev_valid:
+                                    # Nến hiện tại chạm support
+                                    if m15_low <= ch_high and m15_close > ch_low:
+                                        m15_touched = True
+                                        break
+                            else:
+                                # Nến đầu tiên - bỏ qua check nến trước
+                                if m15_low <= ch_high and m15_close > ch_low:
+                                    m15_touched = True
+                                    break
                     
                     elif is_short:
-                        if m15_high >= channel_low and m15_close < channel_high:
-                            m15_touched = True
-                            break
+                        # SHORT: Nến hiện tại
+                        current_in_lower = m15_close < ch_mid
+                        current_in_channel = m15_close > ch_low and m15_close < ch_high
+                        
+                        if current_in_lower and current_in_channel:
+                            if i > 0:
+                                prev_m15_open = last_4_m15['open'].iloc[i-1]
+                                
+                                # ĐƠN GIẢN: Chỉ cần Open dưới channel
+                                prev_valid = prev_m15_open <= ch_low
+                                
+                                if prev_valid:
+                                    # Nến hiện tại chạm resistance
+                                    if m15_high >= ch_low and m15_close < ch_high:
+                                        m15_touched = True
+                                        break
+                            else:
+                                if m15_high >= ch_low and m15_close < ch_high:
+                                    m15_touched = True
+                                    break
                 
                 if m15_touched:
                     timeframes_touched.insert(0, 'M15')
