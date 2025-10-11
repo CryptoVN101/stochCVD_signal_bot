@@ -5,9 +5,9 @@ Test tín hiệu STOCH + S/R - GIỐNG HẾT BOT LIVE
 - LONG: H1 %D < 25 & M15 %D < 20
 - SHORT: H1 %K > 75 & M15 %K > 80
 
-LOGIC ĐƠN GIẢN - CHỈ CHECK OPEN:
-- LONG: Nến trước Open ≥ ch_high
-- SHORT: Nến trước Open ≤ ch_low
+LOGIC CHÍNH XÁC - CHECK HIGH/LOW:
+- LONG: Nến trước High > ch_low
+- SHORT: Nến trước Low < ch_high
 """
 
 import pandas as pd

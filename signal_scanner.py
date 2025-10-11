@@ -6,9 +6,9 @@ Logic S/R từ TradingView (support_resistance_channel.py)
 - LONG: H1 %D < 25 & M15 %D < 20
 - SHORT: H1 %K > 75 & M15 %K > 80
 
-LOGIC ĐƠN GIẢN - CHỈ CHECK OPEN:
-- LONG: Nến trước Open ≥ ch_high → Giá giảm vào support
-- SHORT: Nến trước Open ≤ ch_low → Giá tăng vào resistance
+LOGIC CHÍNH XÁC - CHECK HIGH/LOW:
+- LONG: Nến trước High > ch_low → Đã chạm/ở trên support
+- SHORT: Nến trước Low < ch_high → Đã chạm/ở dưới resistance
 """
 
 import pandas as pd
