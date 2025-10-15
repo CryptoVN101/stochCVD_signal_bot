@@ -207,8 +207,6 @@ Chào mừng! Bot sẽ tự động gửi tín hiệu:
             message += f"⏰ Khung thời gian: {timeframes}\n\n"
         
         message += f"💰 Giá xác nhận: ${price:.4f}\n\n"
-        message += f"📊 Stoch %K H1/M15: {signal['stoch_k_h1']:.2f} / {signal['stoch_k_m15']:.2f}\n"
-        message += f"📊 Stoch %D H1/M15: {signal['stoch_d_h1']:.2f} / {signal['stoch_d_m15']:.2f}"
         
         return message.strip()
     
